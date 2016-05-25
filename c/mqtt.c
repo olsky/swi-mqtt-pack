@@ -15,12 +15,146 @@
 static atom_t ATOM_is_async;
 static atom_t ATOM_client_id;
 static atom_t ATOM_keepalive;
+static atom_t ATOM_use_callbacks;
+
 static atom_t ATOM_message_id;
+static atom_t ATOM_topic;
+static atom_t ATOM_payload;
+static atom_t ATOM_payload_len;
+static atom_t ATOM_qos;
+static atom_t ATOM_retain;
+
 static atom_t ATOM_bind_address;
 
 static atom_t ATOM_protocol_version; // V31 or V311
 static atom_t ATOM_v31;
 static atom_t ATOM_v311;
+
+static atom_t ATOM_flow;
+static atom_t ATOM_foreign;
+static atom_t ATOM_prolog;
+
+static atom_t ATOM_level;
+static atom_t ATOM_log;
+
+// these are options going with hook to prolog
+static functor_t FUNCTOR_topic1;
+static functor_t FUNCTOR_payload1;
+static functor_t FUNCTOR_payload_len;
+static functor_t FUNCTOR_qos1;
+static functor_t FUNCTOR_retain1;
+static functor_t FUNCTOR_message_id1;
+
+static functor_t FUNCTOR_flow1;
+static functor_t FUNCTOR_level1;
+static functor_t FUNCTOR_log1;
+
+
+// hook predicates to call from here:
+
+static predicate_t PRED_on_connect2;
+static predicate_t PRED_on_disconnect2;
+static predicate_t PRED_on_log2;
+static predicate_t PRED_on_message2;
+static predicate_t PRED_on_publish2;
+static predicate_t PRED_on_subscribe2;
+static predicate_t PRED_on_unsubscribe2;
+
+/*
+  mqtt_hook_on_connect/2,
+  mqtt_hook_on_disconnect/2,
+  mqtt_hook_on_message/2,
+  mqtt_hook_on_subscribe/2,
+  mqtt_hook_on_publish/2,
+  mqtt_hook_on_unsubscribe/2,
+  mqtt_hook_on_log/2.
+*/
+  
+  
+static int
+add_int_option(term_t list, functor_t f, int value)
+{
+  // type is of: PL_INTEGER
+
+  int result = FALSE;
+
+  term_t tail = PL_copy_term_ref(list);
+  term_t head = PL_new_term_ref();
+
+  while(PL_get_list(tail, head, tail))
+  { if ( PL_unify_functor(head, f) )
+    { term_t a = PL_new_term_ref();
+
+      if ( !PL_get_arg(1, head, a)) return FALSE;
+
+      switch (type)
+      {
+       case PL_INTEGER: PL_unify_integer(a, value); break;
+       case PL_ATOM   : PL_unify_atom(a, value); break;
+       case PL_INTEGER: PL_unify_integer(a, value); break;
+
+      default:
+	return FALSE;
+      }
+    
+      return rezult;
+    }
+  }
+
+  if ( PL_unify_list(tail, head, tail) )
+    return PL_unify_term(head, PL_FUNCTOR, f, type, value);
+
+  return FALSE;
+}
+
+
+static int
+close_list(term_t list)
+{ term_t tail = PL_copy_term_ref(list);
+  term_t head = PL_new_term_ref();
+
+  while(PL_get_list(tail, head, tail))
+    ;
+
+  return PL_unify_nil(tail);
+}
+
+
+static int
+get_time_option(term_t list, functor_t f, time_t def, time_t *tme)
+{ term_t tail = PL_copy_term_ref(list);
+  term_t head = PL_new_term_ref();
+
+  while(PL_get_list(tail, head, tail))
+  { if ( PL_is_functor(head, f) )
+    { term_t a = PL_new_term_ref();
+      double f;
+
+      _PL_get_arg(1, head, a);
+      if ( !PL_get_float(a, &f) )
+      { atom_t now;
+
+	if ( PL_get_atom(a, &now) && now == ATOM_now )
+	{ time(tme);
+	  return TRUE;
+	} else
+	  return pl_error(NULL, 0, NULL, ERR_TYPE, a, "time");
+      }
+      *tme = (long)f;
+      return TRUE;
+    }
+  }
+
+  *tme = def;
+  return TRUE;
+}
+
+
+
+
+
+
+
 
 typedef struct
 {
@@ -33,6 +167,9 @@ typedef struct
 
 } swi_mqtt;
 
+
+
+
 static int
 destroy_mqtt(swi_mqtt *m)
 { 
@@ -44,14 +181,23 @@ destroy_mqtt(swi_mqtt *m)
 }
 
 
-void connect_callback(struct mosquitto *mosq, void *obj, int result)
+
+		 /*******************************
+		 *	      CALLBACKS		*
+		 *******************************/
+
+
+void on_connect_callback(struct mosquitto *mosq, void *obj, int result)
 {
   // struct swi_mqtt swi_mqtt = (struct swi_mqtt *)obj;
 }
 
-void message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message)
+void on_message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message)
 {
-  // struct swi_mqtt swi_mqtt = (struct swi_mqtt *)obj;
+  struct swi_mqtt m = (struct swi_mqtt *)obj;
+
+
+
 // message->topic;
 // message->payload; message->payloadlen
 /*
@@ -67,23 +213,25 @@ struct mosquitto_message{
 
 
 */
-
-  static predicate_t pred = 0;
-  
+ 
   fid_t fid = PL_open_foreign_frame();
   
   term_t conn; 
   unify_swi_mqtt(conn, m)
   
-  term_t t0 = PL_new_term_ref();
+  term_t t0 = PL_new_term_refs(2);
   
   
+  if ( PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_message2, t0)
+  {
+    // NO_OP
+  }
   
+  PL_discard_foreign_frame(fid);
+}
 
-  if ( !pred )
-    pred = PL_predicate("ws_mask", 1, "websocket");
-
-
+void on_publish_callback(struct mosquitto *mosq, void *obj, int mid)
+{
 
 }
 
@@ -369,10 +517,13 @@ c_mqtt_connect(term_t conn, term_t host, term_t port, term_t options)
     m->mosq	= mosq;
     m->is_async	= is_async;
     m->is_async_loop_started = false;
-    
-    mosquitto_connect_callback_set(mosq, connect_callback);
-    mosquitto_message_callback_set(mosq, message_callback);
-    
+
+    // if ATOM_use_callbacks set -->
+    // set all callbacks
+    mosquitto_connect_callback_set(mosq, on_connect_callback);
+    mosquitto_message_callback_set(mosq, on_message_callback);
+    mosquitto_publish_callback_set(mosq, on_publish_callback);
+
     
     if (is_async) {
       rc = mosquitto_connect_bind_async(mosq, mqtt_host, mqtt_port, keepalive, NULL);
@@ -408,9 +559,18 @@ install_mqtt(void)
   ATOM_protocol_version     = PL_new_atom("protocol_version");
   ATOM_v31   	    	    = PL_new_atom("v31");
   ATOM_v311   	    	    = PL_new_atom("v311");
-
-
+  ATOM_topic   	    	    = PL_new_atom("topic");
   
+
+  // now options (functors with arity 1)
+  FUNCTOR_topic1 = PL_new_functor(ATOM_topic, 1);
+
+
+  // predicate to call
+  PRED_on_log2        = PL_predicate("mqtt_hook_on_log",     2, "mqtt");
+  PRED_on_message2    = PL_predicate("mqtt_hook_on_message", 2, "mqtt");
+
+  // now foreign funcs
   PL_register_foreign("c_mqtt_version",    1, c_mqtt_version,    0);
   PL_register_foreign("c_mqtt_loop",       3, c_mqtt_loop,       0);
   PL_register_foreign("c_mqtt_connect",    4, c_mqtt_connect,    0);
