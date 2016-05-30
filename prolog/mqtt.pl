@@ -1,5 +1,6 @@
 % MQTT pack for SWI-Prolog
 % 2016-05-24 - olsky - initial draft 
+% 2016-05-30 - olsky - working connect and publish
 %
 
 :- module(mqtt, [
@@ -41,14 +42,14 @@ mqtt_connect(Connection, Host, Port) :-
   gensym(mqtt_conn_, A),
   gensym(swi_mqtt_client, Cid),
   
-  mqtt_connect(Connection, Host, Port, [alias(A), client_id(Cid), keepalive(60)]),
+  mqtt_connect(Connection, Host, Port, [alias(A), client_id(Cid), keepalive(10), is_async(false)]),
   true.
   
 % mqtt_connect(-Connection, +Host, +Port, [Options])
 mqtt_connect(Connection, Host, Port, Options) :-
   nonvar(Host),
   nonvar(Port),
-  c_mosquitto_connect(Connection, Host, Port, Options),
+  c_mqtt_connect(Connection, Host, Port, Options),
   (
    member(alias(A), Options)
      -> true
@@ -63,8 +64,10 @@ mqtt_connect(Connection, Host, Port, Options) :-
 
 % close connection
 mqtt_disconnect(Connection) :-
-  retract_all(mqtt_connection(_, Connection)),
-  c_mosquitto_disconnect(Connection),
+  (c_mqtt_disconnect(Connection)
+    -> retractall(mqtt_connection(_, Connection))
+    ; fail
+  ),
   % needed? call_mqtt_disconnected_hook(Connection, [flow(prolog)]),
   true.
 
@@ -73,7 +76,7 @@ mqtt_disconnect(Connection) :-
 
 
 mqtt_pub(Connection, Topic, Payload) :-
-  mqtt_pub(Connection, Topic, Payload, [retain(false), qos(0)]).
+  mqtt_pub(Connection, Topic, Payload, [retain(0), qos(0)]).
 
 % publish to mqtt
 mqtt_pub(Connection, Topic, Payload, Options) :-
