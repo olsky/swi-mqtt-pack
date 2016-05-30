@@ -11,7 +11,9 @@ mqtt_disconnect/1,
 mqtt_pub/4,
 mqtt_pub/3,
 mqtt_sub/3,
-mqtt_sub/2
+mqtt_sub/2,
+mqtt_version/3,
+pack_version/3
 ]).
 
 :- load_foreign_library(foreign(mqtt)).
@@ -30,6 +32,10 @@ mqtt_sub/2
   mqtt_connection/2.
 
 
+mqtt_version(Ma, Mi, Re) :-
+  c_mqtt_version(Ma, Mi, Re).
+pack_version(Ma, Mi, Re) :-
+ c_pack_version(Ma, Mi, Re).
 
 
 % mqtt_connect(-Connection, +Host) default port 1883
@@ -104,7 +110,7 @@ mqtt_sub(Connection, Topic) :-
 % hooks:
 
 mqtt_hook_on_connect(Connection, Data)     :- format('% hook > on_connect     > connection: ~w data: ~w~n', [Connection, Data]).
-mqtt_hook_on_dosconnect(Connection, Data)  :- format('% hook > on_disconnect  > connection: ~w data: ~w~n', [Connection, Data]).
+mqtt_hook_on_disconnect(Connection, Data)  :- format('% hook > on_disconnect  > connection: ~w data: ~w~n', [Connection, Data]).
 mqtt_hook_on_message(Connection, Data)     :- format('% hook > on_message     > connection: ~w data: ~w~n', [Connection, Data]).
 mqtt_hook_on_subscribe(Connection, Data)   :- format('% hook > on_subscribe   > connection: ~w data: ~w~n', [Connection, Data]).
 mqtt_hook_on_publish(Connection, Data)     :- format('% hook > on_publish     > connection: ~w data: ~w~n', [Connection, Data]).
