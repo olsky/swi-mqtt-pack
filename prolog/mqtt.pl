@@ -1,6 +1,7 @@
 % MQTT pack for SWI-Prolog
 % 2016-05-24 - olsky - initial draft 
 % 2016-05-30 - olsky - working connect and publish
+% 2016-05-30 - olsky - working subscribe and loop
 %
 
 :- module(mqtt, [
@@ -8,6 +9,7 @@ mqtt_connect/2,
 mqtt_connect/3,
 mqtt_connect/4,
 mqtt_disconnect/1,
+mqtt_loop/1,
 mqtt_pub/4,
 mqtt_pub/3,
 mqtt_sub/3,
@@ -31,6 +33,9 @@ pack_version/3
 :- dynamic 
   mqtt_connection/2.
 
+
+mqtt_loop(C) :-
+ c_mqtt_loop(C).
 
 mqtt_version(Ma, Mi, Re) :-
   c_mqtt_version(Ma, Mi, Re).
