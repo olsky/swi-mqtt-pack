@@ -582,13 +582,10 @@ c_mqtt_loop(term_t conn)
   printf("--- (f-c) c_mqtt_loop\n");fflush(stdout);
 
   if (!get_swi_mqtt(conn, &m)) return FALSE;
-
-
   if (mosquitto_loop(m->mosq, 10, 1) == MOSQ_ERR_SUCCESS)
   {
     return TRUE;
   }
-
   return FALSE;
 }
 
@@ -1003,7 +1000,7 @@ install_mqtt(void)
   // now foreign funcs
   PL_register_foreign("c_pack_version",    3, c_pack_version,    0);
   PL_register_foreign("c_mqtt_version",    3, c_mqtt_version,    0);
-  PL_register_foreign("c_mqtt_loop",       3, c_mqtt_loop,       0);
+  PL_register_foreign("c_mqtt_loop",       1, c_mqtt_loop,       0);
   PL_register_foreign("c_mqtt_connect",    4, c_mqtt_connect,    0);
   PL_register_foreign("c_free_swi_mqtt",   1, c_free_swi_mqtt,   0);
   PL_register_foreign("c_mqtt_pub",        4, c_mqtt_pub,        0);
