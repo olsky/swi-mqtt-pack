@@ -33,7 +33,7 @@ pack_version/3
 :- dynamic 
   mqtt_connection/2.
 
-
+% for sync connections, need to call it frequently
 mqtt_loop(C) :-
  c_mqtt_loop(C).
 
@@ -82,10 +82,6 @@ mqtt_disconnect(Connection) :-
   % needed? call_mqtt_disconnected_hook(Connection, [flow(prolog)]),
   true.
 
-
-
-
-
 mqtt_pub(Connection, Topic, Payload) :-
   mqtt_pub(Connection, Topic, Payload, [retain(0), qos(0)]).
 
@@ -93,8 +89,6 @@ mqtt_pub(Connection, Topic, Payload) :-
 mqtt_pub(Connection, Topic, Payload, Options) :-
   c_mqtt_pub(Connection, Topic, Payload, Options),
   true.
-
-
 
 
 % subscribe with: 
@@ -105,11 +99,6 @@ mqtt_sub(Connection, Topic, Options) :-
   true.
 mqtt_sub(Connection, Topic) :-
   mqtt_sub(Connection, Topic, []).
-
-
-
-
-
 
 
 % hooks:
