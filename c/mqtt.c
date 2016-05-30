@@ -17,7 +17,7 @@
 
 #define PACK_MAJOR 0
 #define PACK_MINOR 0
-#define PACK_REVISION 2
+#define PACK_REVISION 3
 
 #ifdef O_PLMT
 #define LOCK(mf)   pthread_mutex_lock(&(mf)->mutex)
@@ -211,7 +211,7 @@ get_time_option(term_t list, functor_t f, time_t def, time_t *tme)
 static int
 destroy_mqtt(swi_mqtt *m)
 { 
-  printf("--- (f-c) destroy_mqtt\n");fflush(stdout);
+  //printf("--- (f-c) destroy_mqtt\n");fflush(stdout);
 
   mosquitto_destroy(m->mosq);
   free(m);
@@ -386,7 +386,7 @@ void on_unsubscribe_callback(struct mosquitto *mosq, void *obj, int mid)
 static void
 acquire_mqtt_symbol(atom_t symbol)
 { 
-  printf("--- (f-c) acquire_mqtt_symbol\n");fflush(stdout);
+  //printf("--- (f-c) acquire_mqtt_symbol\n");fflush(stdout);
 
   swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
   m->symbol = symbol;
@@ -395,7 +395,7 @@ acquire_mqtt_symbol(atom_t symbol)
 static int
 release_mqtt_symbol(atom_t symbol)
 { 
-  printf("--- (f-c) release_mqtt_symbol\n");fflush(stdout);
+  //printf("--- (f-c) release_mqtt_symbol\n");fflush(stdout);
 
   swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
   destroy_mqtt(m);
@@ -405,7 +405,7 @@ release_mqtt_symbol(atom_t symbol)
 static int
 compare_mqtt_symbols(atom_t a, atom_t b)
 { 
-  printf("--- (f-c) compare_mqtt_symbols\n");fflush(stdout);
+  //printf("--- (f-c) compare_mqtt_symbols\n");fflush(stdout);
 
   swi_mqtt *ma = PL_blob_data(a, NULL, NULL);
   swi_mqtt *mb = PL_blob_data(b, NULL, NULL);
@@ -417,7 +417,7 @@ compare_mqtt_symbols(atom_t a, atom_t b)
 static int
 write_mqtt_symbol(IOSTREAM *s, atom_t symbol, int flags)
 { 
-  printf("--- (f-c) write_mqtt_symbol\n");fflush(stdout);
+  //printf("--- (f-c) write_mqtt_symbol\n");fflush(stdout);
 
   swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
   Sfprintf(s, "<swi_mqtt>(%p-%p)", m, m->mosq);
@@ -437,7 +437,7 @@ static PL_blob_t mqtt_blob =
 static int
 unify_swi_mqtt(term_t handle, swi_mqtt *m)
 {
-  printf("--- (f-c) unify_swi_mqtt\n");fflush(stdout);
+  //printf("--- (f-c) unify_swi_mqtt\n");fflush(stdout);
 
   if ( PL_unify_blob(handle, m, sizeof(*m), &mqtt_blob) )
     return TRUE;
@@ -450,7 +450,7 @@ static int
 get_swi_mqtt(term_t handle, swi_mqtt **mp)
 { PL_blob_t *type;
 
-  printf("--- (f-c) get_swi_mqtt\n");fflush(stdout);
+  //printf("--- (f-c) get_swi_mqtt\n");fflush(stdout);
 
   void *data;
   if ( PL_get_blob(handle, &data, NULL, &type) && type == &mqtt_blob)
@@ -471,7 +471,7 @@ get_swi_mqtt(term_t handle, swi_mqtt **mp)
 static void
 release_swi_mqtt(swi_mqtt *m)
 { 
-  printf("--- (f-c) release_swi_mqtt\n");fflush(stdout);
+  //printf("--- (f-c) release_swi_mqtt\n");fflush(stdout);
   UNLOCK(m);
 }
 
@@ -501,7 +501,7 @@ empty_swi_mqtt(swi_mqtt *m)
 static foreign_t
 c_free_swi_mqtt(term_t handle)
 { swi_mqtt *m;
-  printf("--- (f-c) c_free_swi_mqtt\n");fflush(stdout);
+  //printf("--- (f-c) c_free_swi_mqtt\n");fflush(stdout);
 
   if ( get_swi_mqtt(handle, &m) )
   {
@@ -558,11 +558,11 @@ static foreign_t
 c_mqtt_disconnect(term_t conn)
 {
   swi_mqtt *m;
-  printf("--- (f-c) c_mqtt_disconnect\n");fflush(stdout);
+  //printf("--- (f-c) c_mqtt_disconnect\n");fflush(stdout);
 
   if (!get_swi_mqtt(conn, &m)) return FALSE;
 
-  printf("--- (f-c) c_mqtt_disconnect > have connection %p\n", m->mosq);fflush(stdout);
+  //printf("--- (f-c) c_mqtt_disconnect > have connection %p\n", m->mosq);fflush(stdout);
 
   if (mosquitto_disconnect(m->mosq) == MOSQ_ERR_SUCCESS)
   {
@@ -579,7 +579,7 @@ c_mqtt_loop(term_t conn)
 {
   swi_mqtt *m;
   
-  printf("--- (f-c) c_mqtt_loop\n");fflush(stdout);
+  //printf("--- (f-c) c_mqtt_loop\n");fflush(stdout);
 
   if (!get_swi_mqtt(conn, &m)) return FALSE;
   if (mosquitto_loop(m->mosq, 10, 1) == MOSQ_ERR_SUCCESS)
