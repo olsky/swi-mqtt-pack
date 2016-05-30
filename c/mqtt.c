@@ -5,9 +5,21 @@
 */
 
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
+#include <SWI-Stream.h>
 #include <SWI-Prolog.h>
+
 #include <mosquitto.h>
+
+#ifdef O_PLMT
+#define LOCK(mf)   pthread_mutex_lock(&(mf)->mutex)
+#define UNLOCK(mf) pthread_mutex_unlock(&(mf)->mutex)
+#else
+#define LOCK(mf)
+#define UNLOCK(mf)
+#endif
 
 
 #define MKATOM(n) ATOM_ ## n = PL_new_atom(#n);
@@ -30,12 +42,16 @@ static atom_t ATOM_protocol_version; // V31 or V311
 static atom_t ATOM_v31;
 static atom_t ATOM_v311;
 
-static atom_t ATOM_flow;
-static atom_t ATOM_foreign;
-static atom_t ATOM_prolog;
+//static atom_t ATOM_flow;
+//static atom_t ATOM_foreign;
+//static atom_t ATOM_prolog;
 
-static atom_t ATOM_level;
-static atom_t ATOM_log;
+//static atom_t ATOM_level;
+//static atom_t ATOM_log;
+
+static atom_t ATOM_payload_type;
+static atom_t ATOM_payload_type_raw;
+static atom_t ATOM_payload_type_char;
 
 // these are options going with hook to prolog
 static functor_t FUNCTOR_topic1;
@@ -45,9 +61,9 @@ static functor_t FUNCTOR_qos1;
 static functor_t FUNCTOR_retain1;
 static functor_t FUNCTOR_message_id1;
 
-static functor_t FUNCTOR_flow1;
-static functor_t FUNCTOR_level1;
-static functor_t FUNCTOR_log1;
+//static functor_t FUNCTOR_flow1;
+//static functor_t FUNCTOR_level1;
+//static functor_t FUNCTOR_log1;
 
 
 // hook predicates to call from here:
@@ -69,8 +85,25 @@ static predicate_t PRED_on_unsubscribe2;
   mqtt_hook_on_unsubscribe/2,
   mqtt_hook_on_log/2.
 */
+
+
+
+
+typedef struct
+{
+  struct mosquitto    *mosq;                   /* mosquito structure */
+  bool          is_async;               /* if true then use mosquitto_connect_async */
+  atom_t        symbol;                 /* <swi_mqtt>(%p) */
+  bool          is_async_loop_started;  /* set to true after mosquitto_loop_start call */
+  int           keepalive;
+  int           loop_max_packets;
+} swi_mqtt;
   
+
+static int unify_swi_mqtt(term_t handle, swi_mqtt *m);
   
+
+/*
 static int
 add_int_option(term_t list, functor_t f, int value)
 {
@@ -84,25 +117,15 @@ add_int_option(term_t list, functor_t f, int value)
   while(PL_get_list(tail, head, tail))
   { if ( PL_unify_functor(head, f) )
     { term_t a = PL_new_term_ref();
-
-      if ( !PL_get_arg(1, head, a)) return FALSE;
-
-      switch (type)
-      {
-       case PL_INTEGER: PL_unify_integer(a, value); break;
-       case PL_ATOM   : PL_unify_atom(a, value); break;
-       case PL_INTEGER: PL_unify_integer(a, value); break;
-
-      default:
-	return FALSE;
+      if ( !PL_get_arg(1, head, a)) {
+        return FALSE;
       }
-    
-      return rezult;
     }
   }
 
-  if ( PL_unify_list(tail, head, tail) )
-    return PL_unify_term(head, PL_FUNCTOR, f, type, value);
+  if ( PL_unify_list(tail, head, tail) ){
+    return PL_unify_term(head, PL_FUNCTOR, f, PL_INTEGER, value);
+  }
 
   return FALSE;
 }
@@ -119,7 +142,9 @@ close_list(term_t list)
   return PL_unify_nil(tail);
 }
 
+*/
 
+/*
 static int
 get_time_option(term_t list, functor_t f, time_t def, time_t *tme)
 { term_t tail = PL_copy_term_ref(list);
@@ -148,24 +173,10 @@ get_time_option(term_t list, functor_t f, time_t def, time_t *tme)
   *tme = def;
   return TRUE;
 }
+*/
 
 
 
-
-
-
-
-
-typedef struct
-{
-  mosquitto    *mosq;                   /* mosquito structure */
-  bool          is_async;               /* if true then use mosquitto_connect_async */
-  atom_t	symbol;			/* <swi_mqtt>(%p) */
-  bool          is_async_loop_started;  /* set to true after mosquitto_loop_start call */
-  int           keepalive;
-  int           loop_max_packets;
-
-} swi_mqtt;
 
 
 
@@ -173,10 +184,10 @@ typedef struct
 static int
 destroy_mqtt(swi_mqtt *m)
 { 
-  mosquitto_destroy(m->mosq);
-  
-  free(m);
+  printf("--- (f-c) destroy_mqtt\n");fflush(stdout);
 
+  mosquitto_destroy(m->mosq);
+  free(m);
   return TRUE;
 }
 
@@ -189,52 +200,62 @@ destroy_mqtt(swi_mqtt *m)
 
 void on_connect_callback(struct mosquitto *mosq, void *obj, int result)
 {
-  // struct swi_mqtt swi_mqtt = (struct swi_mqtt *)obj;
+  swi_mqtt *m = (swi_mqtt *)obj;
+
+  printf("--- (f-c) on_connect_callback > mosq: %p obj: %p-%p\n", mosq, obj, m->mosq);fflush(stdout);
+
+  fid_t fid = PL_open_foreign_frame();
+  term_t t0 = PL_new_term_refs(2);
+  unify_swi_mqtt(t0, m);
+  PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_connect2, t0); 
+  PL_discard_foreign_frame(fid);
 }
 
 void on_message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message)
 {
-  struct swi_mqtt m = (struct swi_mqtt *)obj;
+  swi_mqtt *m = (swi_mqtt *)obj;
 
+  printf("--- (f-c) on_message_callback > mosq: %p obj: %p-%p\n", mosq, obj, m->mosq);fflush(stdout);
 
-
-// message->topic;
-// message->payload; message->payloadlen
-/*
-
-struct mosquitto_message{
-	int mid;
-	char *topic;
-	void *payload;
-	int payloadlen;
-	int qos;
-	bool retain;
-};
-
-
-*/
+/*struct mosquitto_message{
+	int mid; 	char *topic;
+	void *payload;	int payloadlen;
+	int qos;	bool retain;
+};*/
  
   fid_t fid = PL_open_foreign_frame();
-  
-  term_t conn; 
-  unify_swi_mqtt(conn, m)
-  
   term_t t0 = PL_new_term_refs(2);
-  
-  
-  if ( PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_message2, t0)
-  {
-    // NO_OP
-  }
-  
+  unify_swi_mqtt(t0, m);
+  PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_message2, t0);  
   PL_discard_foreign_frame(fid);
 }
 
 void on_publish_callback(struct mosquitto *mosq, void *obj, int mid)
 {
+  swi_mqtt *m = (swi_mqtt *)obj;
 
+  printf("--- (f-c) on_publish_callback > mosq: %p obj: %p-%p\n", mosq, obj, m->mosq);fflush(stdout);
+
+  fid_t fid = PL_open_foreign_frame();
+  term_t t0 = PL_new_term_refs(2);
+  unify_swi_mqtt(t0, m);
+  PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_publish2, t0); 
+  PL_discard_foreign_frame(fid);
 }
 
+
+void on_log_callback(struct mosquitto *mosq, void *obj, int level, const char *str)
+{
+  swi_mqtt *m = (swi_mqtt *)obj;
+
+  printf("--- (f-c) on_log_callback > mosq: %p obj: %p-%p log str: %s\n", mosq, obj, m->mosq, str);fflush(stdout);
+
+  fid_t fid = PL_open_foreign_frame();
+  term_t t0 = PL_new_term_refs(2);
+  unify_swi_mqtt(t0, m);
+  PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_log2, t0); 
+  PL_discard_foreign_frame(fid);
+}
 
 		 /*******************************
 		 *	      SYMBOL		*
@@ -242,37 +263,44 @@ void on_publish_callback(struct mosquitto *mosq, void *obj, int mid)
 
 static void
 acquire_mqtt_symbol(atom_t symbol)
-{ swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
+{ 
+  printf("--- (f-c) acquire_mqtt_symbol\n");fflush(stdout);
+
+  swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
   m->symbol = symbol;
 }
 
 static int
 release_mqtt_symbol(atom_t symbol)
-{ swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
+{ 
+  printf("--- (f-c) release_mqtt_symbol\n");fflush(stdout);
 
+  swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
   destroy_mqtt(m);
   return TRUE;
 }
 
 static int
 compare_mqtt_symbols(atom_t a, atom_t b)
-{ swi_mqtt *ma = PL_blob_data(a, NULL, NULL);
-  swi_mqtt *mb = PL_blob_data(b, NULL, NULL);
+{ 
+  printf("--- (f-c) compare_mqtt_symbols\n");fflush(stdout);
 
+  swi_mqtt *ma = PL_blob_data(a, NULL, NULL);
+  swi_mqtt *mb = PL_blob_data(b, NULL, NULL);
   return ( ma > mb ?  1 :
 	   ma < mb ? -1 : 0
 	 );
 }
 
-
 static int
 write_mqtt_symbol(IOSTREAM *s, atom_t symbol, int flags)
-{ swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
+{ 
+  printf("--- (f-c) write_mqtt_symbol\n");fflush(stdout);
 
-  Sfprintf(s, "<swi_mqtt>(%p)", m);
+  swi_mqtt *m = PL_blob_data(symbol, NULL, NULL);
+  Sfprintf(s, "<swi_mqtt>(%p-%p)", m, m->mosq);
   return TRUE;
 }
-
 
 static PL_blob_t mqtt_blob =
 { PL_BLOB_MAGIC,
@@ -286,94 +314,80 @@ static PL_blob_t mqtt_blob =
 
 static int
 unify_swi_mqtt(term_t handle, swi_mqtt *m)
-{ if ( PL_unify_blob(handle, m, sizeof(*m), &mqtt_blob) )
-    return TRUE;
+{
+  printf("--- (f-c) unify_swi_mqtt\n");fflush(stdout);
 
+  if ( PL_unify_blob(handle, m, sizeof(*m), &mqtt_blob) )
+    return TRUE;
   if ( !PL_is_variable(handle) )
     return PL_uninstantiation_error(handle);
-
   return FALSE;					/* (resource) error */
 }
 
 static int
 get_swi_mqtt(term_t handle, swi_mqtt **mp)
 { PL_blob_t *type;
-  void *data;
 
+  printf("--- (f-c) get_swi_mqtt\n");fflush(stdout);
+
+  void *data;
   if ( PL_get_blob(handle, &data, NULL, &type) && type == &mqtt_blob)
   { swi_mqtt *m = data;
-
     // assert(mf->magic == MEMFILE_MAGIC);
     LOCK(m);
-
     if ( m->symbol )
     { *mp = m;
-
       return TRUE;
     }
-
     PL_permission_error("access", "freed_swi_mqtt", handle);
     return FALSE;
   }
-
   return PL_type_error("swi_mqtt", handle);
 }
 
 
 static void
 release_swi_mqtt(swi_mqtt *m)
-{ UNLOCK(m);
+{ 
+  printf("--- (f-c) release_swi_mqtt\n");fflush(stdout);
+  UNLOCK(m);
 }
 
 
+/*
 static void
 empty_swi_mqtt(swi_mqtt *m)
 { if ( m->data )
     free(m->data);
 
-  m->encoding     = ENC_UTF8;
-  m->data         = NULL;
-  m->end          = 0;
-  m->gap_start    = 0;
-  m->gap_size     = 0;
-  m->char_count   = NOSIZE;
-  m->pcache.valid = 0;
-  m->here         = 0;
+  // init with default values
+  m->symbol = 0;
+  m->is_async              = TRUE;
+  m->is_async_loop_started = FALSE;
+  m->keepalive             = 60;
+  m->loop_max_packets      = 10;
 }
+*/
 
 
 
-
-
-
-
-// TODO add following:
-// - define blob to wrap: static struct mosquitto *mosq = NULL;
-// - init mosquitto lib (mosquitto_new)
-// - cleanup (mosquitto_lib_cleanup)
-// - connect/disconnect to/from broker (mosquitto_connect_bind, mosquitto_disconnect)
-// - current connections
-// - connection discovery predicate
-// - publish predicate (mosquitto_publish)
-// - subscribe predicate (mosquitto_subscribe)
-
-
+     /*******************************
+     *        FOREIGN PREDICATES    *
+     *******************************/
 
 
 static foreign_t
 c_free_swi_mqtt(term_t handle)
 { swi_mqtt *m;
+  printf("--- (f-c) c_free_swi_mqtt\n");fflush(stdout);
 
   if ( get_swi_mqtt(handle, &m) )
   {
     m->symbol = 0;
-  
     mosquitto_destroy(m->mosq);
-    
-    release_mqtt(m);
+    release_swi_mqtt(m);
     return TRUE;
   }
-
   return FALSE;
 }
 
@@ -383,19 +397,18 @@ c_free_swi_mqtt(term_t handle)
 
 
 static foreign_t 
-c_mqtt_version(term_t ver)
+c_mqtt_version(term_t maj, term_t min, term_t rev)
 {
-  term_t tmp = PL_new_term_ref();
-
   if ( 
-      PL_unify_term(tmp,PL_FUNCTOR_CHARS,".",2,PL_INT, LIBMOSQUITTO_MINOR, PL_INT, LIBMOSQUITTO_REVISION) // Minor + Rev 
+      PL_unify_integer(maj, LIBMOSQUITTO_MAJOR)
       &&
-      PL_unify_term(ver,PL_FUNCTOR_CHARS,".",2,PL_INT, LIBMOSQUITTO_MAJOR, PL_TERM, tmp )    // Major
+      PL_unify_integer(min, LIBMOSQUITTO_MINOR)
+      &&
+      PL_unify_integer(rev, LIBMOSQUITTO_REVISION)
      )
   {
     return TRUE; 
   }
-
   return FALSE;
 }
 
@@ -405,11 +418,17 @@ static foreign_t
 c_mqtt_disconnect(term_t conn)
 {
   swi_mqtt *m;
-  
-  if (get_swi_mqtt(conn, &m) && mosquitto_disconnect(m->mosq))
+  printf("--- (f-c) c_mqtt_disconnect\n");fflush(stdout);
+
+  if (!get_swi_mqtt(conn, &m)) return FALSE;
+
+  printf("--- (f-c) c_mqtt_disconnect > have connection %p\n", m->mosq);fflush(stdout);
+
+  if (mosquitto_disconnect(m->mosq) == MOSQ_ERR_SUCCESS)
   {
-    return TRUE;
+      return TRUE;
   }
+  
 
   return FALSE;
 }
@@ -420,7 +439,12 @@ c_mqtt_loop(term_t conn)
 {
   swi_mqtt *m;
   
-  if (get_swi_mqtt(conn, &m) && mosquitto_loop(m->mosq, 10, 1))
+  printf("--- (f-c) c_mqtt_loop\n");fflush(stdout);
+
+  if (!get_swi_mqtt(conn, &m)) return FALSE;
+
+
+  if (mosquitto_loop(m->mosq, 10, 1) == MOSQ_ERR_SUCCESS)
   {
     return TRUE;
   }
@@ -433,152 +457,304 @@ c_mqtt_loop(term_t conn)
 static foreign_t 
 c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 {
+  int result = FALSE;
+
   swi_mqtt *m;
   int mid;
-  char buf[100];
+  char buf[81];
+  char* mqtt_topic   = NULL;
+  char* mqtt_payload = NULL;
+  char* payload_type = NULL;
+  int qos = 0;
+
+  int mosq_rc;
+  struct mosquitto *mosq;
+
+  printf("--- (f-c) c_mqtt_pub\n");fflush(stdout);
 
   if (!get_swi_mqtt(conn, &m))
   {
-    return FALSE;
+    result = FALSE;
+    goto CLEANUP;
   }
 
-  if (mosquitto_publish(mosq, &mid, mqtt_topic, strlen(buf), buf, qos, retain);)
+  mosq = m->mosq;
+  printf("--- (f-c) c_mqtt_pub > have connection %p (mosq: %p)\n", m->mosq, mosq);fflush(stdout);
+
+  mosq_rc = mosquitto_reconnect(m->mosq);
+  if (mosq_rc == MOSQ_ERR_SUCCESS)
   {
-    return TRUE;
+    printf("--- (f-c) c_mqtt_pub > mosquitto_reconnect-ed\n");fflush(stdout);
+  } else {
+    printf("--- (f-c) c_mqtt_pub > mosquitto_reconnect failed: %d\n", mosq_rc);fflush(stdout);
   }
 
-  return FALSE;
-}
 
-
-static foreign_t 
-c_mqtt_connect(term_t conn, term_t host, term_t port, term_t options)
-{
-  struct mosquitto *mosq;
-
-  int rc = 0;
-
-  char* mqtt_host = NULL;
-  int mqtt_port = 1883;
-
-  char* client_id;
-  int keepalive = 60;
-  bool is_async = FALSE;
-  
-  if ( !PL_get_integer_ex(port, &mqtt_port))
-    return FALSE;
-    
-
-  if (!PL_get_chars(host, &mqtt_host, CVT_WRITE | BUF_MALLOC)) { 
-    PL_free(mqtt_host);
-    return FALSE;
+  if (!PL_get_chars(topic, &mqtt_topic, CVT_WRITE | BUF_MALLOC)) { 
+    result = FALSE;
+    goto CLEANUP;
   }
-    
+  printf("--- (f-c) c_mqtt_pub > topic is: %s\n", mqtt_topic);fflush(stdout);
+/*
   if ( options )
   { 
       term_t tail = PL_copy_term_ref(options);
       term_t head = PL_new_term_ref();
 
       while(PL_get_list(tail, head, tail))
-      { size_t arity;
-	atom_t name;
+      { 
+        size_t arity;
+        atom_t name;
 
-	if ( PL_get_name_arity(head, &name, &arity) && arity == 1 )
-	{ term_t arg = PL_new_term_ref();
+        if ( PL_get_name_arity(head, &name, &arity) && arity == 1 )
+        { 
+            term_t arg = PL_new_term_ref();
 
-	  _PL_get_arg(1, head, arg);
-	  
-	  if        ( name == ATOM_client_id ) { if (!get_encoding(  arg, &client_id) ) { return FALSE; }
-	  } else if ( name == ATOM_is_async )  { if (!PL_get_bool(   arg, &is_async)  ) { return pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, arg, "boolean");}
-	  } else if ( name == ATOM_keepalive ) { if (!PL_get_long_ex(arg, &keepalive) ) { return FALSE; }
-	  }
-	  
-	} else { 
-	  return pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, head, "option");
-	}
+            _PL_get_arg(1, head, arg);
+    
+                   if ( name == ATOM_payload_type ) { if (!PL_get_chars(  arg, &payload_type, CVT_WRITE|BUF_MALLOC) ) { result = FALSE;goto CLEANUP; }
+            } else if ( name == ATOM_qos          ) { if (!PL_get_integer(arg, &qos) ) { result = FALSE;goto CLEANUP; }
+            }
+    
+        } else { 
+            result = pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, head, "option");
+            goto CLEANUP;
+        }
       }
+      // unify with NIL --> end of list
       if ( !PL_get_nil(tail) )
       { 
-        return pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, tail, "list");
+        result = pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, tail, "list");
+        goto CLEANUP;
       }
+  }
+*/
+  if (!PL_get_chars(payload, &mqtt_payload, CVT_WRITE | BUF_MALLOC)) { 
+    result = FALSE;
+    goto CLEANUP;
+  }
+
+  printf("--- (f-c) c_mqtt_pub > payload is: %s\n", mqtt_payload);fflush(stdout);
+
+  memset(buf, 0, 81*sizeof(char));
+  snprintf(buf, 80, "%s", mqtt_payload);
+
+  printf("--- (f-c) c_mqtt_pub > publish...\n");fflush(stdout);
+  mosq_rc = mosquitto_publish(m->mosq, &mid, mqtt_topic, strlen(buf), buf, qos, 0);
+  if (mosq_rc == MOSQ_ERR_SUCCESS)
+  {
+    printf("--- (f-c) c_mqtt_pub > publish done\n");fflush(stdout);
+    result = TRUE;
+    goto CLEANUP;
+  } else {
+    printf("--- (f-c) c_mqtt_pub > publish failed rc: %d\n", mosq_rc);fflush(stdout);
   }
 
 
+CLEANUP:
+  PL_free(mqtt_topic);
+  PL_free(payload_type);
+
+  return result;
+}
+
+
+static foreign_t 
+c_mqtt_connect(term_t conn, term_t host, term_t port, term_t options)
+{
+  int result = FALSE;
+
+  struct mosquitto *mosq;
+
+  int rc = 1;
+
+  char* mqtt_host = NULL;
+  int mqtt_port = 1883;
+
+  char* client_id;
+  int keepalive = 60;
+  int is_async = FALSE;
+  
+  printf("--- (f-c) c_mqtt_connect\n");fflush(stdout);
+
+
+  if ( !PL_get_integer_ex(port, &mqtt_port))
+  {
+    result = FALSE;
+    goto CLEANUP;
+  }
+  
+
+  if (!PL_get_chars(host, &mqtt_host, CVT_WRITE | BUF_MALLOC)) { 
+    result = FALSE;
+    goto CLEANUP;
+  }
+  printf("--- (f-c) c_mqtt_connect > mqtt host: %s port: %d\n", mqtt_host, mqtt_port);fflush(stdout);
+
+    
+  if ( options )
+  { 
+      printf("--- (f-c) c_mqtt_connect > loop_options...\n");fflush(stdout);
+
+      term_t tail = PL_copy_term_ref(options);
+      term_t head = PL_new_term_ref();
+
+      while(PL_get_list(tail, head, tail))
+      { 
+        int arity;
+	      atom_t name;
+
+        if ( PL_get_name_arity(head, &name, &arity) && arity == 1 )
+        { 
+            term_t arg = PL_new_term_ref();
+
+            _PL_get_arg(1, head, arg);
+	  
+  	        if        ( name == ATOM_client_id ) { if (!PL_get_chars(  arg, &client_id, CVT_WRITE | BUF_MALLOC) ) { result = FALSE; goto CLEANUP;}
+  	        } else if ( name == ATOM_is_async )  { if (!PL_get_bool(   arg, &is_async)  ) { result = FALSE;goto CLEANUP;}
+  	        } else if ( name == ATOM_keepalive ) { if (!PL_get_integer(arg, &keepalive) ) { result = FALSE; goto CLEANUP;}
+            }
+	  
+        } else { 
+            result = FALSE; //pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, head, "option");
+            goto CLEANUP;
+        }
+      }
+      // unify with NIL --> end of list
+      if ( !PL_get_nil(tail) )
+      { 
+        result = FALSE; //pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, tail, "list");
+        goto CLEANUP;
+      }
+  }
+
+  mosquitto_lib_init();
+
+  printf("--- (f-c) c_mqtt_connect > init mems...\n");fflush(stdout);
   // allocate mem for struct
   swi_mqtt *m = calloc(1, sizeof(*m));
 
-  if ( !m )
-    return PL_resource_error("memory");
+  if ( !m ) {
+    result = PL_resource_error("memory");
+    goto CLEANUP;
+  }
   
   // pass swi_mqtt as user object (will be available in all callbacks)
   mosq = mosquitto_new(client_id, true, m);
   if (mosq)
   {
+    printf("--- (f-c) c_mqtt_connect > new mqtt: %p\n", mosq);fflush(stdout);
     m->mosq	= mosq;
+    printf("--- (f-c) c_mqtt_connect > m->mosq: %p\n", m->mosq);fflush(stdout);
     m->is_async	= is_async;
     m->is_async_loop_started = false;
 
     // if ATOM_use_callbacks set -->
     // set all callbacks
-    mosquitto_connect_callback_set(mosq, on_connect_callback);
-    mosquitto_message_callback_set(mosq, on_message_callback);
-    mosquitto_publish_callback_set(mosq, on_publish_callback);
+    mosquitto_log_callback_set(m->mosq, on_log_callback);
+    mosquitto_connect_callback_set(m->mosq, on_connect_callback);
+    mosquitto_message_callback_set(m->mosq, on_message_callback);
+    mosquitto_publish_callback_set(m->mosq, on_publish_callback);
+
 
     
     if (is_async) {
-      rc = mosquitto_connect_bind_async(mosq, mqtt_host, mqtt_port, keepalive, NULL);
+      printf("--- (f-c) c_mqtt_connect > connect async...\n");fflush(stdout);
+      // with bind: rc = mosquitto_connect_bind_async(m->mosq, mqtt_host, mqtt_port, keepalive, NULL);
+      rc = mosquitto_connect_async(m->mosq, mqtt_host, mqtt_port, keepalive);
     } else {
-      // call it for sync:
-      mosquitto_threaded_set(mosq, true);
-      rc = mosquitto_connect_bind(mosq, mqtt_host, mqtt_port, keepalive, NULL);
+      printf("--- (f-c) c_mqtt_connect > connect sync...\n");fflush(stdout);
+      // call it for sync: mosquitto_threaded_set(m->mosq, true);
+      // with bind: rc = mosquitto_connect_bind(m->mosq, mqtt_host, mqtt_port, keepalive, NULL);
+      rc = mosquitto_connect(m->mosq, mqtt_host, mqtt_port, keepalive);
     }
     if (rc > 0)
     {
-      return PL_resource_error("mqtt_connect_failed");
+      result = PL_resource_error("mqtt_connect_failed");
+      goto CLEANUP;
     }
+    printf("--- (f-c) c_mqtt_connect > bind done\n");fflush(stdout);
   }
 
-  if ( unify_swi_mqtt(conn, m) )
-    return TRUE;
+  if ( unify_swi_mqtt(conn, m) ) 
+  {
+    printf("--- (f-c) c_mqtt_connect > unify_swi_mqtt done\n");fflush(stdout);
+    result = TRUE;
+    goto CLEANUP;
+  }
 
-  return FALSE;
+
+
+CLEANUP:
+  PL_free(mqtt_host);
+  PL_free(client_id);
+
+  return result;
 }
 
 
 install_t 
 install_mqtt(void)
 {
-  // MKATOM(client_id);
-  ATOM_client_id	    = PL_new_atom("client_id");
-  ATOM_keepalive	    = PL_new_atom("keepalive");
-  ATOM_is_async	   	    = PL_new_atom("is_async");
-  ATOM_message_id   	    = PL_new_atom("message_id");
+  printf("--- (f-c) install_mqtt\n");fflush(stdout);
 
-  ATOM_bind_address   	    = PL_new_atom("bind_address");
+  ATOM_is_async       = PL_new_atom("is_async");
+  ATOM_client_id      = PL_new_atom("client_id");
+  ATOM_keepalive      = PL_new_atom("keepalive");
+  ATOM_use_callbacks  = PL_new_atom("use_callbacks");
 
-  ATOM_protocol_version     = PL_new_atom("protocol_version");
-  ATOM_v31   	    	    = PL_new_atom("v31");
-  ATOM_v311   	    	    = PL_new_atom("v311");
-  ATOM_topic   	    	    = PL_new_atom("topic");
-  
+  ATOM_message_id     = PL_new_atom("message_id");
+  ATOM_topic          = PL_new_atom("topic");
+  ATOM_payload        = PL_new_atom("payload");
+  ATOM_payload_len    = PL_new_atom("payload_len");
+  ATOM_qos            = PL_new_atom("qos");
+  ATOM_retain         = PL_new_atom("retain");
+
+  ATOM_bind_address   = PL_new_atom("bind_address");
+
+  ATOM_protocol_version = PL_new_atom("protocol_version");
+  ATOM_v31            = PL_new_atom("v31");
+  ATOM_v311           = PL_new_atom("v311");
+
+//  ATOM_flow           = PL_new_atom("flow");
+//  ATOM_foreign        = PL_new_atom("foreign");
+//  ATOM_prolog         = PL_new_atom("prolog");
+
+//  ATOM_level          = PL_new_atom("level");
+//  ATOM_log            = PL_new_atom("log");
+
+  ATOM_payload_type      = PL_new_atom("payload_type");
+  ATOM_payload_type_raw  = PL_new_atom("payload_type_raw");
+  ATOM_payload_type_char = PL_new_atom("payload_type_char");
+
 
   // now options (functors with arity 1)
-  FUNCTOR_topic1 = PL_new_functor(ATOM_topic, 1);
+  FUNCTOR_topic1      = PL_new_functor(ATOM_topic, 1);
+  FUNCTOR_payload1    = PL_new_functor(ATOM_payload, 1);
+  FUNCTOR_payload_len = PL_new_functor(ATOM_payload_len, 1);
+  FUNCTOR_qos1        = PL_new_functor(ATOM_qos, 1);
+  FUNCTOR_retain1     = PL_new_functor(ATOM_retain, 1);
+  FUNCTOR_message_id1 = PL_new_functor(ATOM_message_id, 1);
 
 
   // predicate to call
-  PRED_on_log2        = PL_predicate("mqtt_hook_on_log",     2, "mqtt");
-  PRED_on_message2    = PL_predicate("mqtt_hook_on_message", 2, "mqtt");
+  PRED_on_connect2      = PL_predicate("mqtt_hook_on_connect",     2, "mqtt");
+  PRED_on_disconnect2   = PL_predicate("mqtt_hook_on_disconnect",  2, "mqtt");
+
+  PRED_on_log2          = PL_predicate("mqtt_hook_on_log",         2, "mqtt");
+  PRED_on_message2      = PL_predicate("mqtt_hook_on_message",     2, "mqtt");
+
+  PRED_on_publish2      = PL_predicate("mqtt_hook_on_publish",     2, "mqtt");
+  PRED_on_subscribe2    = PL_predicate("mqtt_hook_on_subscribe",   2, "mqtt");
+  PRED_on_unsubscribe2  = PL_predicate("mqtt_hook_on_unsubscribe", 2, "mqtt");
 
   // now foreign funcs
-  PL_register_foreign("c_mqtt_version",    1, c_mqtt_version,    0);
+  PL_register_foreign("c_mqtt_version",    3, c_mqtt_version,    0);
   PL_register_foreign("c_mqtt_loop",       3, c_mqtt_loop,       0);
   PL_register_foreign("c_mqtt_connect",    4, c_mqtt_connect,    0);
   PL_register_foreign("c_free_swi_mqtt",   1, c_free_swi_mqtt,   0);
   PL_register_foreign("c_mqtt_pub",        4, c_mqtt_pub,        0);
   PL_register_foreign("c_mqtt_disconnect", 1, c_mqtt_disconnect, 0);
-
-
 
 
   mosquitto_lib_init();
@@ -588,6 +764,7 @@ install_mqtt(void)
 install_t 
 uninstall_mqtt(void)
 {
+  printf("--- (f-c) uninstall_mqtt\n");fflush(stdout);
   // de-init mosquitto lib
   mosquitto_lib_cleanup();
 }
