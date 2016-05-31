@@ -28,10 +28,10 @@
 #define _LOG(...) 
 #endif
 
-#define PACK_MAJOR 0
+#define PACK_MAJOR 1
 #define PACK_MINOR 0
-#define PACK_REVISION 4
-#define PACK_VERSION_NUMBER (PACK_MAJOR*1000000+PACK_MINOR*1000+PACK_REVISION)
+#define PACK_REVISION 0
+#define PACK_VERSION_NUMBER (PACK_MAJOR*10000+PACK_MINOR*100+PACK_REVISION)
 
 
 #ifdef O_PLMT_MF
@@ -188,44 +188,6 @@ close_list(term_t list)
   return PL_unify_nil(tail);
 }
 
-
-/*
-static int
-get_time_option(term_t list, functor_t f, time_t def, time_t *tme)
-{ term_t tail = PL_copy_term_ref(list);
-  term_t head = PL_new_term_ref();
-
-  while(PL_get_list(tail, head, tail))
-  { if ( PL_is_functor(head, f) )
-    { term_t a = PL_new_term_ref();
-      double f;
-
-      _PL_get_arg(1, head, a);
-      if ( !PL_get_float(a, &f) )
-      { atom_t now;
-
-	if ( PL_get_atom(a, &now) && now == ATOM_now )
-	{ time(tme);
-	  return TRUE;
-	} else
-	  return pl_error(NULL, 0, NULL, ERR_TYPE, a, "time");
-      }
-      *tme = (long)f;
-      return TRUE;
-    }
-  }
-
-  *tme = def;
-  return TRUE;
-}
-*/
-
-
-
-
-
-
-
 static int
 destroy_mqtt(swi_mqtt *m)
 { 
@@ -237,9 +199,8 @@ destroy_mqtt(swi_mqtt *m)
 }
 
 
-
 		 /*******************************
-		 *	      CALLBACKS		*
+		 *	      CALLBACKS	            *
 		 *******************************/
 
 void on_disconnect_callback(struct mosquitto *mosq, void *obj, int reason)
@@ -398,7 +359,7 @@ void on_unsubscribe_callback(struct mosquitto *mosq, void *obj, int mid)
 
 
 		 /*******************************
-		 *	      SYMBOL		*
+		 *	      SYMBOL                *
 		 *******************************/
 
 static void
@@ -1011,6 +972,58 @@ CLEANUP:
 
 
 
+
+
+static foreign_t 
+c_mqtt_unsub(term_t conn, term_t topic)
+{
+  int result = FALSE;
+
+  swi_mqtt *m;
+  // int mid;
+
+  char* mqtt_topic   = NULL;
+
+  int mosq_rc;
+  struct mosquitto *mosq;
+
+  _LOG("--- (f-c) c_mqtt_unsub\n");
+
+  if (!get_swi_mqtt(conn, &m))
+  {
+    result = FALSE;
+    goto CLEANUP;
+  }
+
+  mosq = m->mosq;
+  _LOG("--- (f-c) c_mqtt_unsub > have connection %p (mosq: %p)\n", m->mosq, mosq);
+
+  if (!PL_get_chars(topic, &mqtt_topic, CVT_WRITE | BUF_MALLOC)) { 
+    result = FALSE;
+    goto CLEANUP;
+  }
+  _LOG("--- (f-c) c_mqtt_unsub > topic pattern is: %s\n", mqtt_topic);
+
+  mosq_rc = mosquitto_unsubscribe(mosq, NULL, mqtt_topic);
+  if (mosq_rc == MOSQ_ERR_SUCCESS)
+  {
+    result = TRUE;
+    _LOG("--- (f-c) c_mqtt_sub > un-sub-ed\n");
+  } else {
+    _LOG("--- (f-c) c_mqtt_sub > unsubscribe failed: %d\n", mosq_rc);
+  }
+
+CLEANUP:
+  PL_free(mqtt_topic);
+  return result;
+}
+
+
+     /*******************************
+     *        install / uninstall   *
+     *******************************/
+
+
 install_t 
 install_mqtt(void)
 {
@@ -1083,7 +1096,7 @@ install_mqtt(void)
   PL_register_foreign("c_mqtt_pub",        4, c_mqtt_pub,        0);
   PL_register_foreign("c_mqtt_disconnect", 1, c_mqtt_disconnect, 0);
   PL_register_foreign("c_mqtt_sub",        3, c_mqtt_sub,        0);
-  //PL_register_foreign("c_mqtt_unsub",      3, c_mqtt_unsub,        0);
+  PL_register_foreign("c_mqtt_unsub",      2, c_mqtt_unsub,      0);
 
   signal(SIGINT, handle_signal);
   signal(SIGTERM, handle_signal);
