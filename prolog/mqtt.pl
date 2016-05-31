@@ -13,6 +13,7 @@ mqtt_pub/4,
 mqtt_pub/3,
 mqtt_sub/3,
 mqtt_sub/2,
+mqtt_unsub/2,
 mqtt_version/3,
 pack_version/3,
 mqtt_version/1,
@@ -76,8 +77,6 @@ mqtt_connect(Connection, Host, Port, Options) :-
   true.
 
 
-
-
 % close connection
 mqtt_disconnect(Connection) :-
   (c_mqtt_disconnect(Connection)
@@ -88,9 +87,6 @@ mqtt_disconnect(Connection) :-
   true.
 
 
-
-
-
 mqtt_pub(Connection, Topic, Payload) :-
   mqtt_pub(Connection, Topic, Payload, [retain(0), qos(0)]).
 
@@ -98,8 +94,6 @@ mqtt_pub(Connection, Topic, Payload) :-
 mqtt_pub(Connection, Topic, Payload, Options) :-
   c_mqtt_pub(Connection, Topic, Payload, Options),
   true.
-
-
 
 
 % subscribe with: 
@@ -112,8 +106,11 @@ mqtt_sub(Connection, Topic) :-
   mqtt_sub(Connection, Topic, []).
 
 
-
-
+% unsubscribe from: 
+% - topic pattern
+mqtt_unsub(Connection, Topic) :-
+  c_mqtt_unsub(Connection, Topic),
+  true.
 
 
 
