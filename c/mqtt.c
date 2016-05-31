@@ -18,18 +18,19 @@
 
 #define O_PLMT 1
 
+//#define MQTT_DEBUG_FOREIGN 1
 
-#define DEBUG_FOREIGN 1
+#undef MQTT_DEBUG_FOREIGN
 
-#ifdef DEBUG_FOREIGN
+#ifdef MQTT_DEBUG_FOREIGN
 #define _LOG(...)    printf(__VA_ARGS__);fflush(stdout);
 #else
-#define _LOG(...) /*no op*/
+#define _LOG(...) 
 #endif
 
 #define PACK_MAJOR 0
 #define PACK_MINOR 0
-#define PACK_REVISION 3
+#define PACK_REVISION 4
 #define PACK_VERSION_NUMBER (PACK_MAJOR*1000000+PACK_MINOR*1000+PACK_REVISION)
 
 
@@ -893,7 +894,7 @@ c_mqtt_loop(term_t conn)
 
   if (!get_swi_mqtt(conn, &m)) return FALSE;
 
-  if (!m->is_async_loop_started)
+  if (m->is_async && !m->is_async_loop_started)
   {
       if (mosquitto_loop_start(m->mosq) == MOSQ_ERR_SUCCESS)
       {
