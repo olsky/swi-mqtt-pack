@@ -1,7 +1,7 @@
 % MQTT pack for SWI-Prolog
 % 2016-05-24 - olsky - initial draft 
 % 2016-05-30 - olsky - working connect and publish
-% 2016-05-30 - olsky - working subscribe and loop
+% 2016-05-31 - olsky - addding async interface
 %
 
 :- module(mqtt, [
@@ -15,7 +15,9 @@ mqtt_pub/3,
 mqtt_sub/3,
 mqtt_sub/2,
 mqtt_version/3,
-pack_version/3
+pack_version/3,
+mqtt_version/1,
+pack_version/1
 ]).
 
 :- load_foreign_library(foreign(mqtt)).
@@ -33,7 +35,7 @@ pack_version/3
 :- dynamic 
   mqtt_connection/2.
 
-% for sync connections, need to call it frequently
+
 mqtt_loop(C) :-
  c_mqtt_loop(C).
 
@@ -41,6 +43,10 @@ mqtt_version(Ma, Mi, Re) :-
   c_mqtt_version(Ma, Mi, Re).
 pack_version(Ma, Mi, Re) :-
  c_pack_version(Ma, Mi, Re).
+mqtt_version(Version) :-
+  c_mqtt_version(Version).
+pack_version(Version) :-
+ c_pack_version(Version).
 
 
 % mqtt_connect(-Connection, +Host) default port 1883
@@ -82,6 +88,10 @@ mqtt_disconnect(Connection) :-
   % needed? call_mqtt_disconnected_hook(Connection, [flow(prolog)]),
   true.
 
+
+
+
+
 mqtt_pub(Connection, Topic, Payload) :-
   mqtt_pub(Connection, Topic, Payload, [retain(0), qos(0)]).
 
@@ -99,7 +109,6 @@ mqtt_sub(Connection, Topic, Options) :-
   true.
 mqtt_sub(Connection, Topic) :-
   mqtt_sub(Connection, Topic, []).
-
 
 % hooks:
 
