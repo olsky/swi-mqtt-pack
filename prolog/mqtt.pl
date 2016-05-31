@@ -1,7 +1,6 @@
 % MQTT pack for SWI-Prolog
 % 2016-05-24 - olsky - initial draft 
 % 2016-05-30 - olsky - working connect and publish
-% 2016-05-31 - olsky - addding async interface
 %
 
 :- module(mqtt, [
@@ -101,6 +100,8 @@ mqtt_pub(Connection, Topic, Payload, Options) :-
   true.
 
 
+
+
 % subscribe with: 
 % - topic pattern
 % - qos
@@ -109,6 +110,12 @@ mqtt_sub(Connection, Topic, Options) :-
   true.
 mqtt_sub(Connection, Topic) :-
   mqtt_sub(Connection, Topic, []).
+
+
+
+
+
+
 
 % hooks:
 
