@@ -16,7 +16,7 @@ versions:-
 % hook > on_log         > connection: <swi_mqtt>(0x8a5980-0x8a5ae0) data: [level(16),log(Client swi_mqtt_client sending PUBLISH (d0, q0, r0, m1, 'topicone', ... (4 bytes)))]
 % hook > on_publish     > connection: <swi_mqtt>(0x8a5980-0x8a5ae0) data: [message_id(1)]
 % hook > on_log         > connection: <swi_mqtt>(0x8a5980-0x8a5ae0) data: [level(16),log(Client swi_mqtt_client sending DISCONNECT)]
-% hook > on_connect     > connection: <swi_mqtt>(0x8a5980-0x8a5ae0) data: [reason(0)]
+% hook > on_disconnect  > connection: <swi_mqtt>(0x8a5980-0x8a5ae0) data: [reason(0)]
 true.
 
 
@@ -39,7 +39,7 @@ simple_pub(Topic, Value) :-
 % hook > on_log         > connection: <swi_mqtt>(0x889f20-0x889f50) data: [level(16),log(Client swi_mqtt_client sending SUBSCRIBE (Mid: 1, Topic: topicino, QoS: 0))]
 % hook > on_log         > connection: <swi_mqtt>(0x889f20-0x889f50) data: [level(16),log(Client swi_mqtt_client sending UNSUBSCRIBE (Mid: 2, Topic: topicino))]
 % hook > on_log         > connection: <swi_mqtt>(0x889f20-0x889f50) data: [level(16),log(Client swi_mqtt_client sending DISCONNECT)]
-% hook > on_connect     > connection: <swi_mqtt>(0x889f20-0x889f50) data: [reason(0)]
+% hook > on_disconnect  > connection: <swi_mqtt>(0x889f20-0x889f50) data: [reason(0)]
 true.
 
 
