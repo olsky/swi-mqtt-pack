@@ -1,6 +1,6 @@
 name(mqtt).
 title('mqtt - pub/sub pack for SWI-Prolog using mosquitto').
-version('1.0.0').
+version('1.0.1').
 author('Oleh Lozynskyy', 'oleh.lozynskyy+github@gmail.com').
 packager('Oleh Lozynskyy', 'oleh.lozynskyy+github@gmail.com').
 maintainer('Oleh Lozynskyy', 'oleh.lozynskyy+github@gmail.com').
