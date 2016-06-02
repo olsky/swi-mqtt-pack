@@ -66,6 +66,11 @@ mqtt_connect(Connection, Host, Port) :-
 mqtt_connect(Connection, Host, Port, Options) :-
   nonvar(Host),
   nonvar(Port),
+  (
+    member(is_async(true), Options)
+     -> ignore(c_create_engine)
+     ; true
+  ),
   c_mqtt_connect(Connection, Host, Port, Options),
   (
    member(alias(A), Options)
@@ -113,14 +118,20 @@ mqtt_unsub(Connection, Topic) :-
   true.
 
 
+% hook dump
+mqtt_hook_dump(Event, C, Data) :-
+  thread_self(T), 
+  format('% hook <~w> ~t <~w> ~t <mqtt:~w> ~t <~w>~n', [T, Event, C, Data]), 
+  %sleep(2),
+  true.
 
 % hooks:
 
-mqtt_hook_on_connect(Connection, Data)     :- format('% hook > on_connect     > connection: ~w data: ~w~n', [Connection, Data]).
-mqtt_hook_on_disconnect(Connection, Data)  :- format('% hook > on_disconnect  > connection: ~w data: ~w~n', [Connection, Data]).
-mqtt_hook_on_message(Connection, Data)     :- format('% hook > on_message     > connection: ~w data: ~w~n', [Connection, Data]).
-mqtt_hook_on_subscribe(Connection, Data)   :- format('% hook > on_subscribe   > connection: ~w data: ~w~n', [Connection, Data]).
-mqtt_hook_on_publish(Connection, Data)     :- format('% hook > on_publish     > connection: ~w data: ~w~n', [Connection, Data]).
-mqtt_hook_on_unsubscribe(Connection, Data) :- format('% hook > on_unsubscribe > connection: ~w data: ~w~n', [Connection, Data]).
-mqtt_hook_on_log(Connection, Data)         :- format('% hook > on_log         > connection: ~w data: ~w~n', [Connection, Data]).
+mqtt_hook_on_connect(C, Data)     :- mqtt_hook_dump(on_connect, C, Data).
+mqtt_hook_on_disconnect(C, Data)  :- mqtt_hook_dump(on_disconnect, C, Data).
+mqtt_hook_on_message(C, Data)     :- mqtt_hook_dump(on_message, C, Data).
+mqtt_hook_on_subscribe(C, Data)   :- mqtt_hook_dump(on_subscribe, C, Data).
+mqtt_hook_on_publish(C, Data)     :- mqtt_hook_dump(on_publish, C, Data).
+mqtt_hook_on_unsubscribe(C, Data) :- mqtt_hook_dump(on_unsubscribe, C, Data).
+mqtt_hook_on_log(C, Data)         :- mqtt_hook_dump(on_log, C, Data).
 
