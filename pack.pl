@@ -5,4 +5,4 @@ author('Oleh Lozynskyy', 'oleh.lozynskyy+github@gmail.com').
 packager('Oleh Lozynskyy', 'oleh.lozynskyy+github@gmail.com').
 maintainer('Oleh Lozynskyy', 'oleh.lozynskyy+github@gmail.com').
 home('https://github.com/olsky/swi-mqtt-pack').
-download('https://github.com/olsky/swi-mqtt-pack/mqtt-0.0.1.tgz').
+download('https://github.com/olsky/swi-mqtt-pack/releases/download/v1.0.1/mqtt-1.0.1.zip').
