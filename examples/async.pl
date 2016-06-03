@@ -16,6 +16,7 @@ versions:-
 async_pub(Topic, Value) :-
   mqtt_connect(A, 'localhost', 1883, [alias(swi_mqtt1), client_id(swi_mqtt_client1), keepalive(10), is_async(true)]),
   mqtt_pub(A, Topic, Value),
+  sleep(5),
   mqtt_disconnect(A).
 
 

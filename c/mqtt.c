@@ -18,8 +18,8 @@
 
 #define O_PLMT 1
 
-//#define MQTT_DEBUG_FOREIGN 1
 #undef MQTT_DEBUG_FOREIGN
+#define MQTT_DEBUG_FOREIGN 1
 
 #ifdef MQTT_DEBUG_FOREIGN
 #define _LOG(...)    printf(__VA_ARGS__);fflush(stdout);
@@ -77,6 +77,16 @@ static atom_t ATOM_payload_type_char;
 static atom_t ATOM_result;
 static atom_t ATOM_reason;
 
+static atom_t ATOM_module;
+static atom_t ATOM_on_connect;
+static atom_t ATOM_on_disconnect;
+static atom_t ATOM_on_log;
+static atom_t ATOM_on_message;
+static atom_t ATOM_on_publish;
+static atom_t ATOM_on_subscribe;
+static atom_t ATOM_on_unsubscribe;
+static atom_t ATOM_hooks;
+
 // these are options going with hook to prolog
 static functor_t FUNCTOR_topic1;
 static functor_t FUNCTOR_payload1;
@@ -119,11 +129,20 @@ static predicate_t PRED_on_unsubscribe2;
 typedef struct
 {
   struct mosquitto    *mosq;                   /* mosquito structure */
+  bool          is_in_use;
   bool          is_async;               /* if true then use mosquitto_connect_async */
   atom_t        symbol;                 /* <swi_mqtt>(%p) */
   bool          is_async_loop_started;  /* set to true after mosquitto_loop_start call */
   int           keepalive;
   int           loop_max_packets;
+  PL_engine_t   pl_engine;              /* prolog engine for async processing */
+  predicate_t   callback_on_connect2;
+  predicate_t   callback_on_disconnect2;
+  predicate_t   callback_on_log2;
+  predicate_t   callback_on_message2;
+  predicate_t   callback_on_publish2;
+  predicate_t   callback_on_subscribe2;
+  predicate_t   callback_on_unsubscribe2;
 } swi_mqtt;
   
 
@@ -191,38 +210,63 @@ close_list(term_t list)
 static int
 destroy_mqtt(swi_mqtt *m)
 { 
-  _LOG("--- (f-c) destroy_mqtt\n");
-
-  mosquitto_destroy(m->mosq);
-  free(m);
+  _LOG("--- (f-c) destroy_mqtt swi_mqtt: %p \n", m);
+  if (m && m->mosq) {
+    if (m->is_in_use == TRUE)
+    {
+      _LOG("--- (f-c) destroy_mqtt - connection is in use\n");
+      return FALSE;
+    } else {
+      mosquitto_destroy(m->mosq);
+      m->mosq = NULL;
+      free(m);    
+      m = NULL;
+    }
+  }
   return TRUE;
 }
 
 
-static int engine_for_callbacks(void)
+static int set_engine_for_callbacks(swi_mqtt *m)
 {
   int thread_id = PL_thread_self();
   if (thread_id >= 0)
   {
     return TRUE;
   }
+ 
+  PL_engine_t engine_to_use;
 
-
-  if (!current_engine)
+  if (m->is_async)
   {
-    current_engine =  PL_create_engine(NULL); // PL_current_engine();
+    engine_to_use = m->pl_engine;
+  } else {
+    if (!current_engine)
+    {
+      current_engine = PL_create_engine(NULL);
+    }
+    engine_to_use = current_engine;
   }
 
-
-  if (PL_set_engine(current_engine, NULL) == PL_ENGINE_SET)
+  if (PL_set_engine(engine_to_use, NULL) == PL_ENGINE_SET)
   {
     return TRUE;
   }
 
-
+  _LOG("--- (f-c) set_engine_for_callbacks > failed to recover an engine. probably mqtt_disconnect was called...\n");
   return FALSE;  
 }
 
+/*
+static int unset_engine_for_callbacks(swi_mqtt *m)
+{
+  if (m->is_async && PL_set_engine(NULL, NULL) == PL_ENGINE_SET)
+  {
+    return TRUE;
+  }
+  return FALSE; 
+}
+*/
 		 /*******************************
 		 *	      CALLBACKS	            *
 		 *******************************/
@@ -236,9 +280,8 @@ void on_disconnect_callback(struct mosquitto *mosq, void *obj, int reason)
 
   if (thread_id < 0)
   { 
-    if (engine_for_callbacks() == FALSE)
+    if (set_engine_for_callbacks(m) == FALSE)
     {
-      _LOG("--- (f-c) on_disconnect_callback > failed to recover an engine\n");
       return;
     } else {
       thread_id = PL_thread_self();
@@ -256,6 +299,8 @@ void on_disconnect_callback(struct mosquitto *mosq, void *obj, int reason)
 
   PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_disconnect2, t0); 
   PL_discard_foreign_frame(fid);
+
+  // unset_engine_for_callbacks(m);
 }
 
 
@@ -268,9 +313,8 @@ void on_connect_callback(struct mosquitto *mosq, void *obj, int result)
 
   if (thread_id < 0)
   { 
-    if (engine_for_callbacks() == FALSE)
+    if (set_engine_for_callbacks(m) == FALSE)
     {
-      _LOG("--- (f-c) on_connect_callback > failed to recover an engine\n");
       return;
     } else {
       thread_id = PL_thread_self();
@@ -287,6 +331,8 @@ void on_connect_callback(struct mosquitto *mosq, void *obj, int result)
 
   PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_connect2, t0); 
   PL_discard_foreign_frame(fid);
+
+  // unset_engine_for_callbacks(m);
 }
 
 void on_message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message)
@@ -298,9 +344,8 @@ void on_message_callback(struct mosquitto *mosq, void *obj, const struct mosquit
 
   if (thread_id < 0)
   { 
-    if (engine_for_callbacks() == FALSE)
+    if (set_engine_for_callbacks(m) == FALSE)
     {
-      _LOG("--- (f-c) on_message_callback > failed to recover an engine\n");
       return;
     } else {
       thread_id = PL_thread_self();
@@ -324,6 +369,8 @@ void on_message_callback(struct mosquitto *mosq, void *obj, const struct mosquit
 
   PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_message2, t0);  
   PL_discard_foreign_frame(fid);
+
+  // unset_engine_for_callbacks(m);
 }
 
 void on_publish_callback(struct mosquitto *mosq, void *obj, int mid)
@@ -335,9 +382,8 @@ void on_publish_callback(struct mosquitto *mosq, void *obj, int mid)
 
   if (thread_id < 0)
   { 
-    if (engine_for_callbacks() == FALSE)
+    if (set_engine_for_callbacks(m) == FALSE)
     {
-      _LOG("--- (f-c) on_publish_callback > failed to recover an engine\n");
       return;
     } else {
       thread_id = PL_thread_self();
@@ -353,9 +399,10 @@ void on_publish_callback(struct mosquitto *mosq, void *obj, int mid)
   add_int_option( t1, FUNCTOR_message_id1,  mid);
   close_list(t1);
 
-
   PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_publish2, t0); 
   PL_discard_foreign_frame(fid);
+
+  // unset_engine_for_callbacks(m);
 }
 
 
@@ -368,9 +415,8 @@ void on_log_callback(struct mosquitto *mosq, void *obj, int level, const char *s
 
   if (thread_id < 0)
   { 
-    if (engine_for_callbacks() == FALSE)
+    if (set_engine_for_callbacks(m) == FALSE)
     {
-      _LOG("--- (f-c) on_log_callback > failed to recover an engine\n");
       return;
     } else {
       thread_id = PL_thread_self();
@@ -387,9 +433,10 @@ void on_log_callback(struct mosquitto *mosq, void *obj, int level, const char *s
   add_char_option(t1, FUNCTOR_log1,    str);
   close_list(t1);
 
-
   PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_log2, t0); 
   PL_discard_foreign_frame(fid);
+
+  // unset_engine_for_callbacks(m);
 }
 
 
@@ -402,9 +449,8 @@ void on_subscribe_callback(struct mosquitto *mosq, void *obj, int mid, int qos_c
 
   if (thread_id < 0)
   { 
-    if (engine_for_callbacks() == FALSE)
+    if (set_engine_for_callbacks(m) == FALSE)
     {
-      _LOG("--- (f-c) on_subscribe_callback > failed to recover an engine\n");
       return;
     } else {
       thread_id = PL_thread_self();
@@ -431,7 +477,7 @@ void on_subscribe_callback(struct mosquitto *mosq, void *obj, int mid, int qos_c
  *  granted_qos - an array of integers indicating the granted QoS for each of
  *                the subscriptions.
  */
-
+  // unset_engine_for_callbacks(m);
 }
 
 
@@ -445,9 +491,8 @@ void on_unsubscribe_callback(struct mosquitto *mosq, void *obj, int mid)
 
   if (thread_id < 0)
   { 
-    if (engine_for_callbacks() == FALSE)
+    if (set_engine_for_callbacks(m) == FALSE)
     {
-      _LOG("--- (f-c) on_unsubscribe_callback > failed to recover an engine\n");
       return;
     } else {
       thread_id = PL_thread_self();
@@ -466,7 +511,9 @@ void on_unsubscribe_callback(struct mosquitto *mosq, void *obj, int mid)
 
   PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, PRED_on_unsubscribe2, t0); 
   PL_discard_foreign_frame(fid);
-  }
+
+  // unset_engine_for_callbacks(m);
+}
 
 
 
@@ -521,7 +568,7 @@ write_mqtt_symbol(IOSTREAM *s, atom_t symbol, int flags)
 
 static PL_blob_t mqtt_blob =
 { PL_BLOB_MAGIC,
-  PL_BLOB_NOCOPY,
+  PL_BLOB_UNIQUE | PL_BLOB_NOCOPY,
   "mqtt_connection",
   release_mqtt_symbol,
   compare_mqtt_symbols,
@@ -579,10 +626,12 @@ empty_swi_mqtt(swi_mqtt *m)
 
   // init with default values
   m->symbol = 0;
+  m->is_in_use = FALSE;
   m->is_async              = TRUE;
   m->is_async_loop_started = FALSE;
   m->keepalive             = 60;
   m->loop_max_packets      = 10;
+  m->pl_engine             = -1;
 }
 */
 
@@ -600,6 +649,7 @@ c_free_swi_mqtt(term_t handle)
 
   if ( get_swi_mqtt(handle, &m) )
   {
+    m->is_in_use = FALSE;
     m->symbol = 0;
     mosquitto_destroy(m->mosq);
     release_swi_mqtt(m);
@@ -676,9 +726,17 @@ c_mqtt_disconnect(term_t conn)
 
   if (mosquitto_disconnect(m->mosq) == MOSQ_ERR_SUCCESS)
   {
+      m->is_in_use = FALSE;
+      if (m->is_async)
+      {
+        if (PL_destroy_engine(m->pl_engine) == FALSE)
+        {
+          _LOG("--- (f-c) c_mqtt_disconnect > unable to destroy pl_engine %p\n", m->pl_engine);          
+        }
+
+      }
       return TRUE;
   }
-  
 
   return FALSE;
 }
@@ -699,6 +757,7 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
   char* mqtt_payload = NULL;
   char* payload_type = NULL;
   int qos = 0;
+  int retain = 0;
 
   int mosq_rc;
   struct mosquitto *mosq;
@@ -729,7 +788,7 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
     goto CLEANUP;
   }
   _LOG("--- (f-c) c_mqtt_pub > topic is: %s\n", mqtt_topic);
-/*
+
   if ( options )
   { 
       term_t tail = PL_copy_term_ref(options);
@@ -737,7 +796,7 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 
       while(PL_get_list(tail, head, tail))
       { 
-        size_t arity;
+        int arity;
         atom_t name;
 
         if ( PL_get_name_arity(head, &name, &arity) && arity == 1 )
@@ -746,35 +805,35 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 
             _PL_get_arg(1, head, arg);
     
-                   if ( name == ATOM_payload_type ) { if (!PL_get_chars(  arg, &payload_type, CVT_WRITE|BUF_MALLOC) ) { result = FALSE;goto CLEANUP; }
-            } else if ( name == ATOM_qos          ) { if (!PL_get_integer(arg, &qos) ) { result = FALSE;goto CLEANUP; }
+                   if ( name == ATOM_retain) { if (!PL_get_bool(   arg, &retain)) { result = FALSE;goto CLEANUP;}
+            } else if ( name == ATOM_qos )   { if (!PL_get_integer(arg, &qos)   ) { result = FALSE;goto CLEANUP;}
             }
     
         } else { 
-            result = pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, head, "option");
+            result = FALSE; // pl_error("c_mqtt_pub", 4, NULL, ERR_TYPE, head, "option");
             goto CLEANUP;
         }
       }
       // unify with NIL --> end of list
       if ( !PL_get_nil(tail) )
       { 
-        result = pl_error("c_mosquitto_connect", 4, NULL, ERR_TYPE, tail, "list");
+        result = FALSE; // pl_error("c_mqtt_pub", 4, NULL, ERR_TYPE, tail, "list");
         goto CLEANUP;
       }
   }
-*/
+
   if (!PL_get_chars(payload, &mqtt_payload, CVT_WRITE | BUF_MALLOC)) { 
     result = FALSE;
     goto CLEANUP;
   }
 
-  _LOG("--- (f-c) c_mqtt_pub > payload is: %s\n", mqtt_payload);
+  _LOG("--- (f-c) c_mqtt_pub > qos: %d retain: %d payload: %s\n", qos, retain, mqtt_payload);
 
   memset(buf, 0, 81*sizeof(char));
   snprintf(buf, 80, "%s", mqtt_payload);
 
   _LOG("--- (f-c) c_mqtt_pub > publish...\n");
-  mosq_rc = mosquitto_publish(m->mosq, &mid, mqtt_topic, strlen(buf), buf, qos, 0);
+  mosq_rc = mosquitto_publish(m->mosq, &mid, mqtt_topic, strlen(buf), buf, qos, retain);
   if (mosq_rc == MOSQ_ERR_SUCCESS)
   {
     _LOG("--- (f-c) c_mqtt_pub > publish done\n");
@@ -807,7 +866,7 @@ c_mqtt_connect(term_t conn, term_t host, term_t port, term_t options)
   char* client_id;
   int keepalive = 60;
   int is_async = FALSE;
-  
+  int use_hooks = TRUE;
   _LOG("--- (f-c) c_mqtt_connect\n");
 
 
@@ -844,7 +903,8 @@ c_mqtt_connect(term_t conn, term_t host, term_t port, term_t options)
             _PL_get_arg(1, head, arg);
 	  
   	        if        ( name == ATOM_client_id ) { if (!PL_get_chars(  arg, &client_id, CVT_WRITE | BUF_MALLOC) ) { result = FALSE; goto CLEANUP;}
-  	        } else if ( name == ATOM_is_async )  { if (!PL_get_bool(   arg, &is_async)  ) { result = FALSE;goto CLEANUP;}
+            } else if ( name == ATOM_is_async )  { if (!PL_get_bool(   arg, &is_async)  ) { result = FALSE;goto CLEANUP;}
+            } else if ( name == ATOM_hooks )     { if (!PL_get_bool(   arg, &use_hooks) ) { result = FALSE;goto CLEANUP;}
   	        } else if ( name == ATOM_keepalive ) { if (!PL_get_integer(arg, &keepalive) ) { result = FALSE; goto CLEANUP;}
             }
 	  
@@ -876,6 +936,7 @@ c_mqtt_connect(term_t conn, term_t host, term_t port, term_t options)
   mosq = mosquitto_new(client_id, true, m);
   if (mosq)
   {
+    m->is_in_use = TRUE;
     _LOG("--- (f-c) c_mqtt_connect > new mqtt: %p\n", mosq);
     m->mosq	= mosq;
     _LOG("--- (f-c) c_mqtt_connect > m->mosq: %p\n", m->mosq);
@@ -886,20 +947,27 @@ c_mqtt_connect(term_t conn, term_t host, term_t port, term_t options)
 
     // if ATOM_use_callbacks set -->
     // set all callbacks
-    mosquitto_log_callback_set(m->mosq, on_log_callback);
 
-    mosquitto_connect_callback_set(m->mosq, on_connect_callback);
-    mosquitto_disconnect_callback_set(m->mosq, on_disconnect_callback);
+    // use custom hooks, or dump info with dummy...
+    if (use_hooks)
+    {
+      mosquitto_log_callback_set(m->mosq, on_log_callback);
 
-    mosquitto_message_callback_set(m->mosq, on_message_callback);
-    mosquitto_publish_callback_set(m->mosq, on_publish_callback);
+      mosquitto_connect_callback_set(m->mosq, on_connect_callback);
+      mosquitto_disconnect_callback_set(m->mosq, on_disconnect_callback);
 
-    mosquitto_subscribe_callback_set(m->mosq, on_subscribe_callback);
-    mosquitto_unsubscribe_callback_set(m->mosq, on_unsubscribe_callback);
+      mosquitto_message_callback_set(m->mosq, on_message_callback);
+      mosquitto_publish_callback_set(m->mosq, on_publish_callback);
 
+      mosquitto_subscribe_callback_set(m->mosq, on_subscribe_callback);
+      mosquitto_unsubscribe_callback_set(m->mosq, on_unsubscribe_callback);
+    }
 
     
     if (is_async) {
+      _LOG("--- (f-c) c_mqtt_connect > create prolog engine for async\n");
+      m->pl_engine = PL_create_engine(NULL);
+
       _LOG("--- (f-c) c_mqtt_connect > connect async...\n");
       // with bind: rc = mosquitto_connect_bind_async(m->mosq, mqtt_host, mqtt_port, keepalive, NULL);
       mosq_rc = mosquitto_connect_async(m->mosq, mqtt_host, mqtt_port, keepalive);
@@ -1133,7 +1201,7 @@ CLEANUP:
   return result;
 }
 
-
+// is this required?
 static foreign_t 
 c_create_engine(void)
 {
@@ -1194,8 +1262,21 @@ install_mqtt(void)
   ATOM_payload_type_raw  = PL_new_atom("payload_type_raw");
   ATOM_payload_type_char = PL_new_atom("payload_type_char");
 
-  ATOM_result         = PL_new_atom("result");
+  ATOM_result          = PL_new_atom("result");
   ATOM_reason          = PL_new_atom("reason");
+
+
+  ATOM_module           = PL_new_atom("module");
+  ATOM_on_connect       = PL_new_atom("on_connect");
+  ATOM_on_disconnect    = PL_new_atom("on_disconnect");
+  ATOM_on_log           = PL_new_atom("on_log");
+  ATOM_on_message       = PL_new_atom("message");
+  ATOM_on_publish       = PL_new_atom("on_publish");
+  ATOM_on_subscribe     = PL_new_atom("on_subscribe");
+  ATOM_on_unsubscribe   = PL_new_atom("on_unsubscribe");
+
+  ATOM_hooks            = PL_new_atom("hooks");
+
   // now options (functors with arity 1)
   FUNCTOR_topic1      = PL_new_functor(ATOM_topic, 1);
   FUNCTOR_payload1    = PL_new_functor(ATOM_payload, 1);
@@ -1226,23 +1307,21 @@ install_mqtt(void)
   PL_register_foreign("c_pack_version",    1, c_pack_version1,   0);
   PL_register_foreign("c_mqtt_version",    3, c_mqtt_version3,   0);
   PL_register_foreign("c_mqtt_version",    1, c_mqtt_version1,   0);
-  PL_register_foreign("c_mqtt_loop",       1, c_mqtt_loop,       0);
   PL_register_foreign("c_mqtt_connect",    4, c_mqtt_connect,    0);
-  PL_register_foreign("c_free_swi_mqtt",   1, c_free_swi_mqtt,   0);
-  PL_register_foreign("c_mqtt_pub",        4, c_mqtt_pub,        0);
   PL_register_foreign("c_mqtt_disconnect", 1, c_mqtt_disconnect, 0);
+  PL_register_foreign("c_mqtt_pub",        4, c_mqtt_pub,        0);
   PL_register_foreign("c_mqtt_sub",        3, c_mqtt_sub,        0);
+  PL_register_foreign("c_mqtt_loop",       1, c_mqtt_loop,       0);
   PL_register_foreign("c_mqtt_unsub",      2, c_mqtt_unsub,      0);
+
+  PL_register_foreign("c_free_swi_mqtt",   1, c_free_swi_mqtt,   0);
 
   PL_register_foreign("c_create_engine",   0, c_create_engine,   0);
   PL_register_foreign("c_destroy_engine",  0, c_destroy_engine,  0);
-  
-
 
   signal(SIGINT, handle_signal);
   signal(SIGTERM, handle_signal);
 
- 
 
   mosquitto_lib_init();
 }

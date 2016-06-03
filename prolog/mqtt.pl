@@ -63,6 +63,12 @@ mqtt_connect(Connection, Host, Port) :-
   true.
   
 % mqtt_connect(-Connection, +Host, +Port, [Options])
+% options are:  
+% - alias(A), client_id(Cid), keepalive(10), is_async(false)
+% callbacks:
+% - module()
+% - on_connect() on_disconnect()  on_log() 
+% - on_message() on_publish() on_subscribe(), on_unsubscribe()
 mqtt_connect(Connection, Host, Port, Options) :-
   nonvar(Host),
   nonvar(Port),
@@ -99,6 +105,7 @@ mqtt_pub(Connection, Topic, Payload) :-
 mqtt_pub(Connection, Topic, Payload, Options) :-
   c_mqtt_pub(Connection, Topic, Payload, Options),
   true.
+
 
 
 % subscribe with: 
