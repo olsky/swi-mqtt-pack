@@ -99,7 +99,7 @@ mqtt_disconnect(Connection) :-
 
 
 mqtt_pub(Connection, Topic, Payload) :-
-  mqtt_pub(Connection, Topic, Payload, [retain(0), qos(0)]).
+  mqtt_pub(Connection, Topic, Payload, [retain(false), qos(0)]).
 
 % publish to mqtt
 mqtt_pub(Connection, Topic, Payload, Options) :-
