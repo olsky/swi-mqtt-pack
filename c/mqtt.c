@@ -29,7 +29,7 @@
 
 #define PACK_MAJOR 1
 #define PACK_MINOR 0
-#define PACK_REVISION 4
+#define PACK_REVISION 5
 #define PACK_VERSION_NUMBER (PACK_MAJOR*10000+PACK_MINOR*100+PACK_REVISION)
 
 
@@ -362,6 +362,15 @@ void on_disconnect_callback(struct mosquitto *mosq, void *obj, int reason)
   close_list(t1);
 
   CB_CALL_N_CLOSE_FRAME(on_disconnect)
+
+  if (m->is_async)
+  {
+    if (PL_destroy_engine(m->pl_engine) == FALSE)
+    {
+      _LOG("--- (f-c) on_disconnect_callback > unable to destroy pl_engine %p\n", m->pl_engine);          
+    }
+  }
+
 }
 
 void on_message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message)
