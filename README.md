@@ -1,32 +1,12 @@
 # swi-mqtt-pack
 
+This pack uses mosquitto library in the foreign code to add MQTT functionality to SWI-Prolog.
 
-an example test:
+Supported features:
 
-
-?- use_module(library(mqtt)), module(mqtt).
- 
-true.
-
-mqtt: 2 ?- mqtt_connect(A, localhost), mqtt_pub(A, topicone, 00).
-
-% hook > on_log         > connection: <swi_mqtt>(0x91cde0-0x91c070) data: [level(16),log(Client swi_mqtt_client1 sending CONNECT)]
-
-% hook > on_log         > connection: <swi_mqtt>(0x91cde0-0x91c070) data: [level(16),log(Client swi_mqtt_client1 sending CONNECT)]
-
-% hook > on_log         > connection: <swi_mqtt>(0x91cde0-0x91c070) data: [level(16),log(Client swi_mqtt_client1 sending PUBLISH (d0, q0, r0, m1, 'topicone', ... (1 bytes)))]
-
-% hook > on_publish     > connection: <swi_mqtt>(0x91cde0-0x91c070) data: [message_id(1)]
-
-A = <swi_mqtt>(0x91cde0-0x91c070).
-
-
-mqtt: 2 ?- pack_version(Major, Minor, Rev).
-Major = Minor, Minor = 0,
-Rev = 2.
-
-mqtt: 3 ?- mqtt_version(Major, Minor, Rev).
-Major = 1,
-Minor = 4,
-Rev = 8.
+- async and sync connections
+- mosquitto connection is stored in the PL_blob > this offers multiple mqtt connections
+- connect/pub/sub/disconnect predicates in prolog
+- custom callback per connection supported (set in options when creating connection)
+- multithreaded support: an additional engine will be created and attached to mosquito thread to perform callbacks
 
