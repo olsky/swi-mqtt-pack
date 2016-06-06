@@ -29,7 +29,7 @@
 
 #define PACK_MAJOR 1
 #define PACK_MINOR 0
-#define PACK_REVISION 3
+#define PACK_REVISION 4
 #define PACK_VERSION_NUMBER (PACK_MAJOR*10000+PACK_MINOR*100+PACK_REVISION)
 
 
@@ -695,7 +695,8 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 
   swi_mqtt *m;
   int mid;
-  char buf[81];
+  int buf_len = 2048;
+  char buf[buf_len];
   char* mqtt_topic   = NULL;
   char* mqtt_payload = NULL;
   char* payload_type = NULL;
@@ -776,8 +777,8 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 
   _LOG("--- (f-c) c_mqtt_pub > qos: %d retain: %d payload: %s\n", qos, retain, mqtt_payload);
 
-  memset(buf, 0, 81*sizeof(char));
-  snprintf(buf, 80, "%s", mqtt_payload);
+  memset(buf, 0, (buf_len+1)*sizeof(char));
+  snprintf(buf, buf_len, "%s", mqtt_payload);
 
   _LOG("--- (f-c) c_mqtt_pub > publish...\n");
   mosq_rc = mosquitto_publish(m->mosq, &mid, mqtt_topic, strlen(buf), buf, qos, retain);
