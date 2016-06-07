@@ -1,4 +1,4 @@
-# swi-mqtt-pack
+# SWI-Prolog Mosquitto MQTT Pack
 
 This pack uses mosquitto library in the foreign code to add MQTT functionality to SWI-Prolog.
 
