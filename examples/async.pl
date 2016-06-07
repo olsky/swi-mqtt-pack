@@ -14,7 +14,7 @@ versions:-
 
 */
 async_pub(Topic, Value) :-
-  mqtt_connect(A, 'localhost', 1883, [alias(swi_mqtt1), client_id(swi_mqtt_client1), keepalive(10), is_async(true)]),
+  mqtt_connect(A, 'localhost', 1883, [alias(swi_mqtt1), client_id(swi_mqtt_client1), keepalive(10), is_async(true), debug_hooks(true)]),
   mqtt_pub(A, Topic, Value),
   sleep(5),
   mqtt_disconnect(A).
@@ -26,7 +26,7 @@ async_pub(Topic, Value) :-
 
 */
 async_sub(Topic) :-
-  mqtt_connect(A, 'localhost', 1883, [alias(swi_mqtt2), client_id(swi_mqtt_client2), keepalive(10), is_async(true)]),
+  mqtt_connect(A, 'localhost', 1883, [alias(swi_mqtt2), client_id(swi_mqtt_client2), keepalive(10), is_async(true), debug_hooks(true)]),
   mqtt_sub(A, Topic, []),
   % mqtt_sub(A, '/#', []),
   true.

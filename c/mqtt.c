@@ -32,15 +32,6 @@
 #define PACK_REVISION 5
 #define PACK_VERSION_NUMBER (PACK_MAJOR*10000+PACK_MINOR*100+PACK_REVISION)
 
-
-#ifdef O_PLMT_MF
-#define LOCK(mf)   pthread_mutex_lock(&(mf)->mutex)
-#define UNLOCK(mf) pthread_mutex_unlock(&(mf)->mutex)
-#else
-#define LOCK(mf)
-#define UNLOCK(mf)
-#endif
-
 #define MKATOM(n) ATOM_ ## n = PL_new_atom(#n);
 
 static PL_engine_t current_engine;
@@ -62,10 +53,6 @@ static atom_t ATOM_bind_address;
 static atom_t ATOM_protocol_version; // V31 or V311
 static atom_t ATOM_v31;
 static atom_t ATOM_v311;
-
-//static atom_t ATOM_flow;
-//static atom_t ATOM_foreign;
-//static atom_t ATOM_prolog;
 
 static atom_t ATOM_level;
 static atom_t ATOM_log;
@@ -95,8 +82,6 @@ static functor_t FUNCTOR_payload_len1;
 static functor_t FUNCTOR_qos1;
 static functor_t FUNCTOR_retain1;
 static functor_t FUNCTOR_message_id1;
-
-//static functor_t FUNCTOR_flow1;
 
 static functor_t FUNCTOR_level1;
 static functor_t FUNCTOR_log1;
@@ -549,8 +534,6 @@ get_swi_mqtt(term_t handle, swi_mqtt **mp)
   void *data;
   if ( PL_get_blob(handle, &data, NULL, &type) && type == &mqtt_blob)
   { swi_mqtt *m = data;
-    // assert(mf->magic == MEMFILE_MAGIC);
-    LOCK(m);
     if ( m->symbol )
     { *mp = m;
       return TRUE;
@@ -566,7 +549,6 @@ static void
 release_swi_mqtt(swi_mqtt *m)
 { 
   _LOG("--- (f-b) release_swi_mqtt\n");
-  UNLOCK(m);
 }
 
 
@@ -704,8 +686,8 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 
   swi_mqtt *m;
   int mid;
-  int buf_len = 2048;
-  char buf[buf_len];
+  //int buf_len = 2048;
+  //char buf[buf_len];
   char* mqtt_topic   = NULL;
   char* mqtt_payload = NULL;
   char* payload_type = NULL;
@@ -786,11 +768,13 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 
   _LOG("--- (f-c) c_mqtt_pub > qos: %d retain: %d payload: %s\n", qos, retain, mqtt_payload);
 
-  memset(buf, 0, (buf_len+1)*sizeof(char));
-  snprintf(buf, buf_len, "%s", mqtt_payload);
+  
+  //memset(buf, 0, (buf_len+1)*sizeof(char));
+  //snprintf(buf, buf_len, "%s", mqtt_payload);
 
   _LOG("--- (f-c) c_mqtt_pub > publish...\n");
-  mosq_rc = mosquitto_publish(m->mosq, &mid, mqtt_topic, strlen(buf), buf, qos, retain);
+  // mosq_rc = mosquitto_publish(m->mosq, &mid, mqtt_topic, strlen(buf), buf, qos, retain);
+  mosq_rc = mosquitto_publish(m->mosq, &mid, mqtt_topic, strlen(mqtt_payload), mqtt_payload, qos, retain);
   if (mosq_rc == MOSQ_ERR_SUCCESS)
   {
     _LOG("--- (f-c) c_mqtt_pub > publish done\n");
@@ -1273,6 +1257,8 @@ install_mqtt(void)
 {
   _LOG("--- (f-c) install_mqtt\n");
 
+  mosquitto_lib_init();
+
   ATOM_is_async       = PL_new_atom("is_async");
   ATOM_client_id      = PL_new_atom("client_id");
   ATOM_keepalive      = PL_new_atom("keepalive");
@@ -1290,10 +1276,6 @@ install_mqtt(void)
   ATOM_protocol_version = PL_new_atom("protocol_version");
   ATOM_v31            = PL_new_atom("v31");
   ATOM_v311           = PL_new_atom("v311");
-
-//  ATOM_flow           = PL_new_atom("flow");
-//  ATOM_foreign        = PL_new_atom("foreign");
-//  ATOM_prolog         = PL_new_atom("prolog");
 
   ATOM_level          = PL_new_atom("level");
   ATOM_log            = PL_new_atom("log");
@@ -1360,11 +1342,8 @@ install_mqtt(void)
   PL_register_foreign("c_create_engine",   0, c_create_engine,   0);
   PL_register_foreign("c_destroy_engine",  0, c_destroy_engine,  0);
 
-  signal(SIGINT, handle_signal);
-  signal(SIGTERM, handle_signal);
-
-
-  mosquitto_lib_init();
+  // signal(SIGINT, handle_signal);
+  // signal(SIGTERM, handle_signal);
 }
 
 
