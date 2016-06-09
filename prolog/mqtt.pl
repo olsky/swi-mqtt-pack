@@ -59,7 +59,7 @@ mqtt_connect(Connection, Host, Port) :-
   gensym(mqtt_conn_, A),
   gensym(swi_mqtt_client, Cid),
   
-  mqtt_connect(Connection, Host, Port, [alias(A), client_id(Cid), keepalive(10), is_async(false)]),
+  mqtt_connect(Connection, Host, Port, [alias(A), client_id(Cid), keepalive(60), is_async(false)]),
   true.
   
 % mqtt_connect(-Connection, +Host, +Port, [Options])

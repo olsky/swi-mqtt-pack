@@ -29,7 +29,7 @@
 
 #define PACK_MAJOR 1
 #define PACK_MINOR 0
-#define PACK_REVISION 5
+#define PACK_REVISION 6
 #define PACK_VERSION_NUMBER (PACK_MAJOR*10000+PACK_MINOR*100+PACK_REVISION)
 
 #define MKATOM(n) ATOM_ ## n = PL_new_atom(#n);
@@ -708,7 +708,7 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
   //char buf[buf_len];
   char* mqtt_topic   = NULL;
   char* mqtt_payload = NULL;
-  char* payload_type = NULL;
+  // char* payload_type = NULL;
   int qos = 0;
   int retain = 0;
 
@@ -805,7 +805,8 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 
 CLEANUP:
   PL_free(mqtt_topic);
-  PL_free(payload_type);
+  PL_free(mqtt_payload);
+  // PL_free(payload_type);
 
   return result;
 }
@@ -1069,6 +1070,16 @@ c_mqtt_connect(term_t conn, term_t host, term_t port, term_t options)
 CLEANUP:
   PL_free(mqtt_host);
   PL_free(client_id);
+  PL_free(alias);
+
+  PL_free(hook_module);
+  PL_free(hook_on_log);
+  PL_free(hook_on_connect);
+  PL_free(hook_on_disconnect);
+  PL_free(hook_on_message);
+  PL_free(hook_on_publish);
+  PL_free(hook_on_subscribe);
+  PL_free(hook_on_unsubscribe);
 
   return result;
 }
