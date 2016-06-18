@@ -685,16 +685,12 @@ c_mqtt_disconnect(term_t conn)
         {
           _LOG("--- (f-c) c_mqtt_disconnect > unable to destroy pl_engine %p\n", m->pl_engine);          
         }
-
       }
       return TRUE;
   }
 
   return FALSE;
 }
-
-
-
 
 // in options: [type(bin|char|double|int), qos(0|1|2), retain(true|false)]
 static foreign_t 
@@ -726,16 +722,7 @@ c_mqtt_pub(term_t conn, term_t topic, term_t payload, term_t options)
 
   mosq = m->mosq;
   _LOG("--- (f-c) c_mqtt_pub > have connection %p (mosq: %p)\n", m->mosq, mosq);
-
-  mosq_rc = mosquitto_reconnect(mosq);
-  if (mosq_rc == MOSQ_ERR_SUCCESS)
-  {
-    _LOG("--- (f-c) c_mqtt_pub > mosquitto_reconnect-ed\n");
-  } else {
-    _LOG("--- (f-c) c_mqtt_pub > mosquitto_reconnect failed: %d\n", mosq_rc);
-  }
-
-
+  
   if (!PL_get_chars(topic, &mqtt_topic, CVT_WRITE | BUF_MALLOC)) { 
     result = FALSE;
     goto CLEANUP;
@@ -1085,6 +1072,26 @@ CLEANUP:
 }
 
 static foreign_t 
+c_mqtt_reconnect(term_t conn)
+{
+  swi_mqtt *m;
+  
+  _LOG("--- (f-c) c_mqtt_reconnect\n");
+
+  if (!get_swi_mqtt(conn, &m)) return FALSE;
+
+  int mosq_rc = mosquitto_reconnect(m->mosq);
+  if (mosq_rc == MOSQ_ERR_SUCCESS)
+  {
+    _LOG("--- (f-c) c_mqtt_reconnect > mosquitto_reconnect-ed\n");
+    return TRUE;
+  }
+
+  _LOG("--- (f-c) c_mqtt_reconnect > mosquitto_reconnect failed: %d\n", mosq_rc);
+  return FALSE;
+}
+
+static foreign_t 
 c_mqtt_loop(term_t conn)
 {
   swi_mqtt *m;
@@ -1099,6 +1106,7 @@ c_mqtt_loop(term_t conn)
       {
         m->is_async_loop_started = true;
         _LOG("--- (f-c) c_mqtt_loop > mosquitto_loop_start done\n");
+        return TRUE;
       } else {
         _LOG("--- (f-c) c_mqtt_loop > mosquitto_loop_start failed\n");
         return PL_resource_error("mqtt_loop_start_failed2");
@@ -1139,15 +1147,6 @@ c_mqtt_sub(term_t conn, term_t topic, term_t options)
 
   mosq = m->mosq;
   _LOG("--- (f-c) c_mqtt_sub > have connection %p (mosq: %p)\n", m->mosq, mosq);
-
-  mosq_rc = mosquitto_reconnect(mosq);
-  if (mosq_rc == MOSQ_ERR_SUCCESS)
-  {
-    _LOG("--- (f-c) c_mqtt_sub > mosquitto_reconnect-ed\n");
-  } else {
-    _LOG("--- (f-c) c_mqtt_sub > mosquitto_reconnect failed: %d\n", mosq_rc);
-  }
-
 
   if (!PL_get_chars(topic, &mqtt_topic, CVT_WRITE | BUF_MALLOC)) { 
     result = FALSE;
@@ -1367,6 +1366,7 @@ install_mqtt(void)
   PL_register_foreign("c_mqtt_pub",        4, c_mqtt_pub,        0);
   PL_register_foreign("c_mqtt_sub",        3, c_mqtt_sub,        0);
   PL_register_foreign("c_mqtt_loop",       1, c_mqtt_loop,       0);
+  PL_register_foreign("c_mqtt_reconnect",  1, c_mqtt_reconnect,       0);
   PL_register_foreign("c_mqtt_unsub",      2, c_mqtt_unsub,      0);
 
   PL_register_foreign("c_free_swi_mqtt",   1, c_free_swi_mqtt,   0);
