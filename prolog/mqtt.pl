@@ -8,6 +8,7 @@ mqtt_connect/2,
 mqtt_connect/3,
 mqtt_connect/4,
 mqtt_disconnect/1,
+mqtt_reconnect/1,
 mqtt_loop/1,
 mqtt_pub/4,
 mqtt_pub/3,
@@ -38,6 +39,9 @@ pack_version/1
 
 mqtt_loop(C) :-
  c_mqtt_loop(C).
+
+mqtt_reconnect(C) :-
+ c_mqtt_reconnect(C).
 
 mqtt_version(Ma, Mi, Re) :-
   c_mqtt_version(Ma, Mi, Re).
