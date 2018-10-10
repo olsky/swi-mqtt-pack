@@ -1,5 +1,5 @@
 PACKSODIR=lib/x86_64-linux
-MOSQUITTO_LIBS=-Lext ext/libmosquitto.a
+MOSQUITTO_LIBS=-lmosquitto
 SO=so
 SOEXT=so
 SOBJ=$(PACKSODIR)/mqtt.$(SOEXT)
@@ -8,7 +8,7 @@ CWFLAGS=-Wall
 CMFLAGS=-fno-strict-aliasing -pthread -fPIC -std=c99 
 CIFLAGS=-I. -Iext/include
 DEFS=
-CFLAGS=$(COFLAGS) $(CWFLAGS) $(CMFLAGS) $(CIFLAGS) $(PKGCFLAGS) $(DEFS)
+CFLAGS+=$(COFLAGS) $(CWFLAGS) $(CMFLAGS) $(CIFLAGS) $(PKGCFLAGS) $(DEFS)
 CXXFLAGS=$(CFLAGS)
 
 LD=gcc
