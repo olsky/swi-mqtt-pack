@@ -29,7 +29,7 @@
 
 #define PACK_MAJOR 1
 #define PACK_MINOR 0
-#define PACK_REVISION 6
+#define PACK_REVISION 7
 #define PACK_VERSION_NUMBER (PACK_MAJOR*10000+PACK_MINOR*100+PACK_REVISION)
 
 #define MKATOM(n) ATOM_ ## n = PL_new_atom(#n);
